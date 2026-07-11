@@ -735,12 +735,11 @@ export const createOrder = async (orderData: {
       let customerId: string | null = null;
 
       // Check if the provided ID looks like a real UUID (36 chars with dashes)
-      const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-        orderData.customer.id || ''
-      );
+      const customerProvidedId = orderData.customer.id;
+      const isUUID = customerProvidedId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(customerProvidedId);
 
-      if (isUUID) {
-        customerId = orderData.customer.id || null;
+      if (isUUID && customerProvidedId) {
+        customerId = customerProvidedId;
       } else {
         // Local-generated ID (e.g. CUST-XXXXX) — look up by email instead
         const { data: existingCust } = await supabase
