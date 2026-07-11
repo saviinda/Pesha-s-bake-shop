@@ -1,0 +1,109 @@
+@import "tailwindcss";
+
+:root {
+  --background: #fef3c7; /* Cream background */
+  --foreground: #78350f; /* Dark brown text */
+  --primary: #92400e;    /* Warm brown */
+  --primary-foreground: #ffffff;
+  --secondary: #b45309;  /* Secondary warm brown */
+  --secondary-foreground: #ffffff;
+  --accent: #d97706;     /* Amber accent */
+  --accent-foreground: #ffffff;
+  --card: #ffffff;
+  --card-foreground: #78350f;
+  --border: #fde68a;     /* Light gold border */
+  --muted: #fbf6e3;
+  --muted-foreground: #a16207;
+}
+
+@theme {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-border: var(--border);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  
+  --font-display: var(--font-cormorant), serif;
+  --font-sans: var(--font-outfit), sans-serif;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-outfit), sans-serif;
+  overflow-x: hidden;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-track {
+  background: var(--background);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--primary);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--secondary);
+}
+
+/* Infinite Scrolling Marquee */
+@keyframes marquee {
+  0% {
+    transform: translate3d(-50%, 0, 0);
+  }
+  100% {
+    transform: translate3d(0%, 0, 0);
+  }
+}
+
+.animate-marquee-loop {
+  display: flex;
+  width: max-content;
+  animation: marquee 30s linear infinite;
+}
+
+.animate-marquee-loop:hover {
+  animation-play-state: paused;
+}
+
+/* Premium Styling Utilities */
+.text-luxury-gold {
+  color: #c5a880;
+}
+
+.bg-luxury-gold {
+  background-color: #c5a880;
+}
+
+.border-luxury-gold {
+  border-color: rgba(197, 168, 128, 0.2);
+}
+
+.luxury-card-shadow {
+  box-shadow: 0 10px 40px -15px rgba(44, 27, 24, 0.05), 0 1px 3px rgba(44, 27, 24, 0.01);
+}
+
+.text-3d-luxury {
+  text-shadow: 
+    0.5px 0.5px 0px #e8c5af,
+    1px 1px 0px #c5a880,
+    1.5px 1.5px 0px #a1835f,
+    2px 2px 4px rgba(44, 27, 24, 0.15);
+}
+
+
