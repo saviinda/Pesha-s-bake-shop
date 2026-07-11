@@ -740,7 +740,7 @@ export const createOrder = async (orderData: {
       );
 
       if (isUUID) {
-        customerId = orderData.customer.id;
+        customerId = orderData.customer.id || null;
       } else {
         // Local-generated ID (e.g. CUST-XXXXX) — look up by email instead
         const { data: existingCust } = await supabase
