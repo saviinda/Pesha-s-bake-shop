@@ -36,8 +36,10 @@ function ShopContent() {
   useEffect(() => {
     async function loadData() {
       try {
-        const cats = await getCategories();
-        const prods = await getProducts();
+        const [cats, prods] = await Promise.all([
+          getCategories(),
+          getProducts()
+        ]);
         setCategories(cats);
         setProducts(prods);
       } catch (e) {

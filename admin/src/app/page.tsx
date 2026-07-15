@@ -382,14 +382,21 @@ export default function AdminDashboard() {
   const loadAdminData = useCallback(async (silent = false) => {
     if (!silent) setIsRefreshing(true);
     try {
-      const ords = await getAdminOrders();
-      const prods = await getAdminProducts();
-      const cats = await getAdminCategories();
-      const custs = await getAdminCustomers();
-      const zns = await getAdminDeliveryZones();
-      const metrs = await getAdminMetrics();
-      const confs = await getLeadTimeConflicts();
-      const settings = await getAdminSiteSettings();
+      // Fetch primary data in parallel
+      const [ords, prods, cats, custs, zns, settings] = await Promise.all([
+        getAdminOrders(),
+        getAdminProducts(),
+        getAdminCategories(),
+        getAdminCustomers(),
+        getAdminDeliveryZones(),
+        getAdminSiteSettings()
+      ]);
+
+      // Calculate metrics and conflicts using preloaded data
+      const [metrs, confs] = await Promise.all([
+        getAdminMetrics(ords),
+        getLeadTimeConflicts(ords, prods)
+      ]);
       
       // Load simulated emails log
       if (typeof window !== 'undefined') {
@@ -1939,21 +1946,30 @@ export default function AdminDashboard() {
                           type="file"
                           accept="image/*"
                           disabled={!getPermission('catalog')}
-                          onChange={(e) => {
+                          onChange={async (e) => {
                             const file = e.target.files?.[0];
                             if (file) {
-                              const reader = new FileReader();
-                              reader.onloadend = () => {
-                                setInlineCatImage(reader.result as string);
-                              };
-                              reader.readAsDataURL(file);
+                              try {
+                                showToast('info', 'Uploading category photo...');
+                                const url = await uploadToStorage(file, 'media');
+                                setInlineCatImage(url);
+                                showToast('success', 'Category photo uploaded successfully!');
+                              } catch (err) {
+                                console.error('Storage upload error:', err);
+                                showToast('error', 'Upload failed. Storing local preview. Please ensure the "media" bucket exists in Supabase storage.');
+                                const reader = new FileReader();
+                                reader.onloadend = () => {
+                                  setInlineCatImage(reader.result as string);
+                                };
+                                reader.readAsDataURL(file);
+                              }
                             }
                           }}
                           className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                         />
                         <div className="flex flex-col items-center justify-center gap-2 text-xs text-muted-foreground">
                           <Upload className="h-5 w-5 text-accent" />
-                          {inlineCatImage.startsWith('data:') ? (
+                          {inlineCatImage && !inlineCatImage.includes('unsplash.com') ? (
                             <span className="text-primary font-bold text-xs truncate max-w-[200px]">Photo Attached</span>
                           ) : (
                             <span>Select visual banner image</span>
@@ -2773,7 +2789,7 @@ export default function AdminDashboard() {
                                     const url = await uploadToStorage(file, 'media');
                                     setSiteSettings({ ...siteSettings, home_cover_photo: url });
                                   } catch (err) {
-                                    showToast('error', 'Failed to upload cover photo. Please try again.');
+                                    showToast('error', 'Failed to upload cover photo. Please ensure the "media" bucket exists in your Supabase storage.');
                                   }
                                 }
                               }}
@@ -2826,7 +2842,7 @@ export default function AdminDashboard() {
                                     const url = await uploadToStorage(file, 'media');
                                     setSiteSettings({ ...siteSettings, [`slide${slideNum}_image`]: url } as any);
                                   } catch (err) {
-                                    showToast('error', 'Failed to upload slide image. Please try again.');
+                                    showToast('error', 'Failed to upload slide image. Please ensure the "media" bucket exists in your Supabase storage.');
                                   }
                                 }
                               }}
@@ -3297,14 +3313,23 @@ export default function AdminDashboard() {
                 <input
                   type="file"
                   accept="image/*"
-                  onChange={(e) => {
+                  onChange={async (e) => {
                     const file = e.target.files?.[0];
                     if (file) {
-                      const reader = new FileReader();
-                      reader.onloadend = () => {
-                        setProdFormImage(reader.result as string);
-                      };
-                      reader.readAsDataURL(file);
+                      try {
+                        showToast('info', 'Uploading product photo...');
+                        const url = await uploadToStorage(file, 'media');
+                        setProdFormImage(url);
+                        showToast('success', 'Product photo uploaded successfully!');
+                      } catch (err) {
+                        console.error('Storage upload error:', err);
+                        showToast('error', 'Upload failed. Storing local preview. Please ensure the "media" bucket exists in Supabase storage.');
+                        const reader = new FileReader();
+                        reader.onloadend = () => {
+                          setProdFormImage(reader.result as string);
+                        };
+                        reader.readAsDataURL(file);
+                      }
                     }
                   }}
                   className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
@@ -3435,14 +3460,23 @@ export default function AdminDashboard() {
                   <input
                     type="file"
                     accept="image/*"
-                    onChange={(e) => {
+                    onChange={async (e) => {
                       const file = e.target.files?.[0];
                       if (file) {
-                        const reader = new FileReader();
-                        reader.onloadend = () => {
-                          setCatFormImage(reader.result as string);
-                        };
-                        reader.readAsDataURL(file);
+                        try {
+                          showToast('info', 'Uploading category photo...');
+                          const url = await uploadToStorage(file, 'media');
+                          setCatFormImage(url);
+                          showToast('success', 'Category photo uploaded successfully!');
+                        } catch (err) {
+                          console.error('Storage upload error:', err);
+                          showToast('error', 'Upload failed. Storing local preview. Please ensure the "media" bucket exists in Supabase storage.');
+                          const reader = new FileReader();
+                          reader.onloadend = () => {
+                            setCatFormImage(reader.result as string);
+                          };
+                          reader.readAsDataURL(file);
+                        }
                       }
                     }}
                     className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"

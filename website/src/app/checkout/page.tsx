@@ -30,11 +30,12 @@ export default function Checkout() {
   const [city, setCity] = useState('');
   const [deliveryZoneId, setDeliveryZoneId] = useState('');
   const [deliveryDate, setDeliveryDate] = useState('');
-  const [deliveryTimeSlot, setDeliveryTimeSlot] = useState('10:00 AM - 12:00 PM');
+  const [deliveryTimeSlot, setDeliveryTimeSlot] = useState('');
   
   const [paymentMethod, setPaymentMethod] = useState<'cod' | 'transfer'>('cod');
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const [receiptBase64, setReceiptBase64] = useState<string>('');
+  const [receiptUploading, setReceiptUploading] = useState<boolean>(false);
   
   const [notes, setNotes] = useState('');
   const [formError, setFormError] = useState('');
@@ -69,7 +70,7 @@ export default function Checkout() {
 
   // Calculate required lead time based on cart items
   const maxLeadTimeHours = cartItems.reduce((max, item) => {
-    return Math.max(max, item.product.lead_time_hours);
+    return Math.max(max, item.product.lead_time_hours || 0);
   }, 0);
 
   // Calculate earliest delivery date
@@ -104,16 +105,28 @@ export default function Checkout() {
   const isMinOrderSatisfied = cartSubtotal >= minOrderValue;
   const grandTotal = cartSubtotal + deliveryFee;
 
-  // Handle Receipt Upload conversion to base64
-  const handleReceiptChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Handle Receipt Upload conversion to storage url / fallback base64
+  const handleReceiptChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       setReceiptFile(file);
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setReceiptBase64(reader.result as string);
-      };
-      reader.readAsDataURL(file);
+      setReceiptUploading(true);
+      try {
+        const { uploadToStorage } = await import('@/lib/supabase');
+        const url = await uploadToStorage(file, 'media');
+        setReceiptBase64(url);
+        showToast('success', 'Receipt uploaded successfully!');
+      } catch (err) {
+        console.error('Failed to upload receipt:', err);
+        showToast('error', 'Failed to upload receipt. Storing local preview instead.');
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          setReceiptBase64(reader.result as string);
+        };
+        reader.readAsDataURL(file);
+      } finally {
+        setReceiptUploading(false);
+      }
     }
   };
 
@@ -137,6 +150,12 @@ export default function Checkout() {
       const errMsg = `Minimum order value for ${selectedZone?.name} is LKR ${minOrderValue.toLocaleString()}`;
       setFormError(errMsg);
       showToast('error', errMsg);
+      return;
+    }
+
+    if (paymentMethod === 'transfer' && receiptUploading) {
+      setFormError('Please wait for receipt upload to complete.');
+      showToast('warning', 'Please wait for receipt upload to complete.');
       return;
     }
 
@@ -479,7 +498,12 @@ export default function Checkout() {
                         />
                         
                         <div className="flex flex-col items-center justify-center gap-1 text-xs">
-                          {receiptFile ? (
+                          {receiptUploading ? (
+                            <>
+                              <div className="animate-spin rounded-full h-8 w-8 border-2 border-primary border-b-transparent" />
+                              <p className="font-bold text-primary">Uploading receipt...</p>
+                            </>
+                          ) : receiptFile ? (
                             <>
                               <FileText className="h-8 w-8 text-primary animate-bounce" />
                               <p className="font-bold text-primary">{receiptFile.name}</p>

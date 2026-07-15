@@ -987,9 +987,9 @@ export interface LeadTimeConflict {
   hoursDifference: number;
 }
 
-export const getLeadTimeConflicts = async (): Promise<LeadTimeConflict[]> => {
-  const orders = await getAdminOrders();
-  const products = await getAdminProducts();
+export const getLeadTimeConflicts = async (preloadedOrders?: Order[], preloadedProducts?: Product[]): Promise<LeadTimeConflict[]> => {
+  const orders = preloadedOrders || await getAdminOrders();
+  const products = preloadedProducts || await getAdminProducts();
   const conflicts: LeadTimeConflict[] = [];
 
   orders.forEach(order => {
@@ -1034,8 +1034,8 @@ export interface AdminMetrics {
   cancelledCount: number;
 }
 
-export const getAdminMetrics = async (): Promise<AdminMetrics> => {
-  const orders = await getAdminOrders();
+export const getAdminMetrics = async (preloadedOrders?: Order[]): Promise<AdminMetrics> => {
+  const orders = preloadedOrders || await getAdminOrders();
   
   let totalSales = 0;
   let pendingCount = 0;

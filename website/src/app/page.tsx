@@ -110,9 +110,11 @@ export default function Home() {
   useEffect(() => {
     async function loadData() {
       try {
-        const cats = await getCategories();
-        const prods = await getProducts();
-        const settings = await getSiteSettings();
+        const [cats, prods, settings] = await Promise.all([
+          getCategories(),
+          getProducts(),
+          getSiteSettings()
+        ]);
         setCategories(cats);
         setBestSellers(prods.slice(0, 4));
         setSiteSettings(settings);
