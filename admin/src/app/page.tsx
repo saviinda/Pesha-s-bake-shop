@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useToast } from '@/context/ToastContext';
 import {
   LayoutDashboard,
   ShoppingBag,
@@ -28,7 +29,10 @@ import {
   UserCheck,
   Layers,
   Unlock,
-  RefreshCw
+  RefreshCw,
+  Search,
+  ArrowUp,
+  ArrowDown
 } from 'lucide-react';
 import {
   getAdminOrders,
@@ -95,10 +99,37 @@ const SEEDED_ADMINS = [
 type Tab = 'dashboard' | 'orders' | 'categories' | 'catalog' | 'customers' | 'settings' | 'delivery' | 'users';
 
 export default function AdminDashboard() {
+  const { showToast } = useToast();
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
+  const [activeSlideTab, setActiveSlideTab] = useState(1);
   
   // Mobile menu toggle
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+
+  // Custom confirmation modal state
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+    isWarning?: boolean;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: () => {},
+    isWarning: false
+  });
+
+  const customConfirm = (title: string, message: string, onConfirm: () => void, isWarning = false) => {
+    setConfirmModal({
+      isOpen: true,
+      title,
+      message,
+      onConfirm,
+      isWarning
+    });
+  };
   
   // Authentication states
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -191,11 +222,146 @@ export default function AdminDashboard() {
   // Lightbox for money receipt inspect
   const [activeReceiptUrl, setActiveReceiptUrl] = useState<string | null>(null);
 
-  // Derived filtered orders
-  const filteredOrders = orders.filter(o => {
-    if (orderFilter === 'all') return true;
-    return o.status === orderFilter;
-  });
+  // New Table Operations states (Search, Sort, Pagination)
+  const [orderSearch, setOrderSearch] = useState('');
+  const [orderSortBy, setOrderSortBy] = useState<'id' | 'total' | 'date'>('id');
+  const [orderSortOrder, setOrderSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [orderPage, setOrderPage] = useState(1);
+  const ordersPerPage = 7;
+
+  const [productSearch, setProductSearch] = useState('');
+  const [productFilterCategory, setProductFilterCategory] = useState<string>('all');
+  const [productFilterStatus, setProductFilterStatus] = useState<'all' | 'available' | 'unavailable'>('all');
+  const [productSortBy, setProductSortBy] = useState<'name' | 'price' | 'leadTime'>('name');
+  const [productSortOrder, setProductSortOrder] = useState<'asc' | 'desc'>('asc');
+  const [productPage, setProductPage] = useState(1);
+  const productsPerPage = 7;
+
+  const [customerSortBy, setCustomerSortBy] = useState<'name' | 'registered'>('name');
+  const [customerPage, setCustomerPage] = useState(1);
+  const customersPerPage = 7;
+
+  const [categorySearch, setCategorySearch] = useState('');
+  const [cmsSubTab, setCmsSubTab] = useState<'content' | 'images' | 'seo' | 'maintenance'>('content');
+  const [userSubTab, setUserSubTab] = useState<'operators' | 'roles'>('operators');
+
+  // Processed and paginated orders
+  const processedOrders = useMemo(() => {
+    let result = orders.filter(o => {
+      if (orderFilter === 'all') return true;
+      return o.status === orderFilter;
+    });
+
+    if (orderSearch.trim()) {
+      const q = orderSearch.toLowerCase();
+      result = result.filter(o => 
+        o.id.toLowerCase().includes(q) ||
+        (`${o.customer.firstName} ${o.customer.lastName}`).toLowerCase().includes(q) ||
+        o.customer.phone.toLowerCase().includes(q) ||
+        o.address.city.toLowerCase().includes(q) ||
+        o.items.some((item: any) => item.productName.toLowerCase().includes(q))
+      );
+    }
+
+    result.sort((a, b) => {
+      let comparison = 0;
+      if (orderSortBy === 'id') {
+        comparison = a.id.localeCompare(b.id);
+      } else if (orderSortBy === 'total') {
+        comparison = a.total - b.total;
+      } else if (orderSortBy === 'date') {
+        comparison = a.deliveryDate.localeCompare(b.deliveryDate);
+      }
+      return orderSortOrder === 'asc' ? comparison : -comparison;
+    });
+
+    return result;
+  }, [orders, orderFilter, orderSearch, orderSortBy, orderSortOrder]);
+
+  const paginatedOrders = useMemo(() => {
+    const startIndex = (orderPage - 1) * ordersPerPage;
+    return processedOrders.slice(startIndex, startIndex + ordersPerPage);
+  }, [processedOrders, orderPage]);
+
+  // Processed and paginated products
+  const processedProducts = useMemo(() => {
+    let result = [...products];
+
+    if (productSearch.trim()) {
+      const q = productSearch.toLowerCase();
+      result = result.filter(p => 
+        p.name.toLowerCase().includes(q) ||
+        p.categoryName.toLowerCase().includes(q)
+      );
+    }
+
+    if (productFilterCategory !== 'all') {
+      result = result.filter(p => p.categoryName === productFilterCategory);
+    }
+
+    if (productFilterStatus !== 'all') {
+      const target = productFilterStatus === 'available';
+      result = result.filter(p => p.isAvailable === target);
+    }
+
+    result.sort((a, b) => {
+      let comparison = 0;
+      if (productSortBy === 'name') {
+        comparison = a.name.localeCompare(b.name);
+      } else if (productSortBy === 'price') {
+        comparison = a.basePrice - b.basePrice;
+      } else if (productSortBy === 'leadTime') {
+        comparison = a.leadTimeHours - b.leadTimeHours;
+      }
+      return productSortOrder === 'asc' ? comparison : -comparison;
+    });
+
+    return result;
+  }, [products, productSearch, productFilterCategory, productFilterStatus, productSortBy, productSortOrder]);
+
+  const paginatedProducts = useMemo(() => {
+    const startIndex = (productPage - 1) * productsPerPage;
+    return processedProducts.slice(startIndex, startIndex + productsPerPage);
+  }, [processedProducts, productPage]);
+
+  // Processed and paginated customers
+  const processedCustomers = useMemo(() => {
+    let result = [...customers];
+    if (customerSearch.trim()) {
+      const q = customerSearch.toLowerCase();
+      result = result.filter(cust => 
+        (`${cust.firstName} ${cust.lastName}`).toLowerCase().includes(q) ||
+        cust.email.toLowerCase().includes(q) ||
+        (cust.phone || '').toLowerCase().includes(q)
+      );
+    }
+    result.sort((a, b) => {
+      if (customerSortBy === 'name') {
+        return (`${a.firstName} ${a.lastName}`).localeCompare(`${b.firstName} ${b.lastName}`);
+      } else {
+        const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return dateB - dateA;
+      }
+    });
+    return result;
+  }, [customers, customerSearch, customerSortBy]);
+
+  const paginatedCustomers = useMemo(() => {
+    const startIndex = (customerPage - 1) * customersPerPage;
+    return processedCustomers.slice(startIndex, startIndex + customersPerPage);
+  }, [processedCustomers, customerPage]);
+
+  // Derived filtered categories
+  const filteredCategories = useMemo(() => {
+    if (!categorySearch.trim()) return categories;
+    const q = categorySearch.toLowerCase();
+    return categories.filter(cat => 
+      cat.name.toLowerCase().includes(q) ||
+      (cat.description || '').toLowerCase().includes(q) ||
+      cat.slug.toLowerCase().includes(q)
+    );
+  }, [categories, categorySearch]);
 
   // Check login session on load
   useEffect(() => {
@@ -449,7 +615,7 @@ export default function AdminDashboard() {
   // Update order status trigger
   const handleStatusChange = async (orderId: string, newStatus: Order['status']) => {
     if (!getPermission('orders')) {
-      alert('Your role does not have permission to modify orders.');
+      showToast('error', 'Your role does not have permission to modify orders.');
       return;
     }
     await updateOrderStatus(orderId, newStatus);
@@ -498,7 +664,7 @@ export default function AdminDashboard() {
 
   const handleBulkStatusUpdate = async (newStatus: Order['status']) => {
     if (!getPermission('orders')) {
-      alert('Your role does not have permission to modify orders.');
+      showToast('error', 'Your role does not have permission to modify orders.');
       return;
     }
     if (selectedOrders.length === 0) return;
@@ -512,7 +678,7 @@ export default function AdminDashboard() {
   // Toggle availability trigger
   const handleToggleAvailability = async (prodId: string) => {
     if (!getPermission('catalog')) {
-      alert('Your role does not have permission to modify catalog settings.');
+      showToast('error', 'Your role does not have permission to modify catalog settings.');
       return;
     }
     await toggleProductAvailability(prodId);
@@ -582,10 +748,11 @@ export default function AdminDashboard() {
     }
     
     if (!success) {
-      alert("⚠️ Database Error: Failed to save product to Supabase. This is typically caused by Row-Level Security (RLS) policies blocking insertions. Please run the 'supabase/disable_rls.sql' script in your Supabase SQL editor to allow writes.");
+      showToast('error', "Database Error: Failed to save product to Supabase. Check RLS policies.");
       return;
     }
     
+    showToast('success', editingProductId ? 'Product updated successfully.' : 'Product created successfully.');
     setIsProductModalOpen(false);
     await loadAdminData();
   };
@@ -641,10 +808,11 @@ export default function AdminDashboard() {
     }
 
     if (!success) {
-      alert("⚠️ Database Error: Failed to save category to Supabase. This is typically caused by Row-Level Security (RLS) policies blocking insertions. Please run the 'supabase/disable_rls.sql' script in your Supabase SQL editor to allow writes.");
+      showToast('error', "Database Error: Failed to save category to Supabase.");
       return;
     }
 
+    showToast('success', editingCategoryId ? 'Category updated successfully.' : 'Category created successfully.');
     setIsCategoryModalOpen(false);
     await loadAdminData();
   };
@@ -655,9 +823,10 @@ export default function AdminDashboard() {
     if (!inlineCatName || !inlineCatSlug) return;
     const success = await createCategory(inlineCatName, inlineCatSlug, inlineCatDesc, inlineCatImage);
     if (!success) {
-      alert("⚠️ Database Error: Failed to save category to Supabase. This is typically caused by Row-Level Security (RLS) policies blocking insertions. Please run the 'supabase/disable_rls.sql' script in your Supabase SQL editor to allow writes.");
+      showToast('error', "Database Error: Failed to save category to Supabase.");
       return;
     }
+    showToast('success', 'Category created successfully!');
     setInlineCatName('');
     setInlineCatSlug('');
     setInlineCatDesc('');
@@ -671,9 +840,10 @@ export default function AdminDashboard() {
     if (!inlineZoneName) return;
     const success = await createDeliveryZone(inlineZoneName, inlineZoneMinOrder, inlineZoneFee);
     if (!success) {
-      alert("⚠️ Database Error: Failed to save delivery zone to Supabase. This is typically caused by Row-Level Security (RLS) policies blocking insertions. Please run the 'supabase/disable_rls.sql' script in your Supabase SQL editor to allow writes.");
+      showToast('error', "Database Error: Failed to save delivery zone to Supabase.");
       return;
     }
+    showToast('success', 'Delivery zone created successfully!');
     setInlineZoneName('');
     setInlineZoneMinOrder(1500);
     setInlineZoneFee(250);
@@ -703,6 +873,7 @@ export default function AdminDashboard() {
     setNewUserEmail('');
     setNewUserPassword('');
     setIsAddUserModalOpen(false);
+    showToast('success', 'User account created successfully.');
   };
 
   const handleToggleUserStatus = (userId: string) => {
@@ -715,6 +886,7 @@ export default function AdminDashboard() {
     });
     localStorage.setItem('peshas_admin_users', JSON.stringify(updated));
     setAdminUsers(updated);
+    showToast('success', 'User status updated.');
   };
 
   // Custom role creation
@@ -725,7 +897,7 @@ export default function AdminDashboard() {
 
     // Check if role already exists
     if (customRoles.find(r => r.name.toLowerCase() === newRoleName.trim().toLowerCase())) {
-      alert('This role name already exists.');
+      showToast('warning', 'This role name already exists.');
       return;
     }
 
@@ -751,6 +923,7 @@ export default function AdminDashboard() {
     setRolePermSettings(false);
     setRolePermUsers(false);
     setRolePermDelivery(true);
+    showToast('success', 'Custom system role created.');
   };
 
   // Update permissions for an existing role dynamically
@@ -759,7 +932,7 @@ export default function AdminDashboard() {
     
     // Check hierarchy: Admin cannot edit Super Admin role permissions
     if (currentAdmin?.role === 'Admin' && roleName === 'Super Admin') {
-      alert('Admins cannot modify Super Admin permissions.');
+      showToast('error', 'Admins cannot modify Super Admin permissions.');
       return;
     }
 
@@ -778,6 +951,7 @@ export default function AdminDashboard() {
 
     setCustomRoles(updated);
     localStorage.setItem('peshas_admin_roles', JSON.stringify(updated));
+    showToast('success', 'Role permissions updated.');
   };
 
   // Update a user's role assignment dynamically
@@ -789,7 +963,7 @@ export default function AdminDashboard() {
 
     // Check hierarchy: Admin cannot modify Super Admin users
     if (currentAdmin?.role === 'Admin' && targetUser.role === 'Super Admin') {
-      alert('Admins cannot change roles for Super Admin users.');
+      showToast('error', 'Admins cannot change roles for Super Admin users.');
       return;
     }
 
@@ -802,48 +976,49 @@ export default function AdminDashboard() {
 
     setAdminUsers(updated);
     localStorage.setItem('peshas_admin_users', JSON.stringify(updated));
+    showToast('success', "User's role updated successfully.");
   };
 
   // Delete product wrapper
-  const handleDeleteProduct = async (prodId: string) => {
+  const handleDeleteProduct = (prodId: string) => {
     if (!getPermission('catalog')) return;
-    if (confirm('Are you sure you want to delete this catalog item?')) {
+    customConfirm('Delete Catalog Item', 'Are you sure you want to delete this catalog item?', async () => {
       const res = await deleteProduct(prodId);
       if (res) {
-        alert('Product deleted successfully.');
+        showToast('success', 'Product deleted successfully.');
         await loadAdminData();
       } else {
-        alert('Failed to delete product.');
+        showToast('error', 'Failed to delete product.');
       }
-    }
+    }, true);
   };
 
   // Delete category wrapper
-  const handleDeleteCategory = async (catId: string) => {
+  const handleDeleteCategory = (catId: string) => {
     if (!getPermission('catalog')) return;
-    if (confirm('Are you sure you want to delete this category? This might leave products in this category uncategorized.')) {
+    customConfirm('Delete Category', 'Are you sure you want to delete this category? This might leave products in this category uncategorized.', async () => {
       const res = await deleteCategory(catId);
       if (res) {
-        alert('Category deleted successfully.');
+        showToast('success', 'Category deleted successfully.');
         await loadAdminData();
       } else {
-        alert('Failed to delete category.');
+        showToast('error', 'Failed to delete category.');
       }
-    }
+    }, true);
   };
 
   // System database reset wrapper
-  const handleResetSystemData = async () => {
+  const handleResetSystemData = () => {
     if (!getPermission('settings')) return;
-    if (confirm('⚠️ WARNING: This will permanently delete ALL orders, payments, custom products, custom categories, cover photos, and simulated email logs. Are you absolutely sure you want to reset all system data?')) {
+    customConfirm('Reset System Data', '⚠️ WARNING: This will permanently delete ALL orders, payments, custom products, custom categories, cover photos, and simulated email logs. Are you absolutely sure you want to reset all system data?', async () => {
       const res = await resetSystemData();
       if (res) {
-        alert('System data reset successfully. The page will now reload.');
-        window.location.reload();
+        showToast('success', 'System data reset successfully. The page will now reload.');
+        setTimeout(() => window.location.reload(), 2000);
       } else {
-        alert('Failed to reset system data.');
+        showToast('error', 'Failed to reset system data.');
       }
-    }
+    }, true);
   };
 
   // CMS Settings Editor Save
@@ -851,8 +1026,12 @@ export default function AdminDashboard() {
     e.preventDefault();
     if (!getPermission('settings') || !siteSettings) return;
     const success = await updateSiteSettings(siteSettings);
-    alert('Homepage CMS settings updated successfully!');
-    await loadAdminData();
+    if (success) {
+      showToast('success', 'Homepage CMS settings updated successfully!');
+      await loadAdminData();
+    } else {
+      showToast('error', 'Failed to save settings.');
+    }
   };
 
   // Delivery zone handlers
@@ -862,15 +1041,24 @@ export default function AdminDashboard() {
       setZones(prev => prev.map(z =>
         z.id === zoneId ? { ...z, name: editZoneName, minOrderValue: editZoneMinOrder, fee: editZoneFee } : z
       ));
+      showToast('success', 'Zone fees updated successfully.');
+    } else {
+      showToast('error', 'Failed to save zone fee.');
     }
     setEditingZoneId(null);
     await loadAdminData();
   };
 
-  const handleDeleteZone = async (zoneId: string) => {
-    if (!confirm('Delete this delivery zone? This cannot be undone.')) return;
-    const success = await deleteDeliveryZone(zoneId);
-    if (success) setZones(prev => prev.filter(z => z.id !== zoneId));
+  const handleDeleteZone = (zoneId: string) => {
+    customConfirm('Delete Delivery Zone', 'Delete this delivery zone? This cannot be undone.', async () => {
+      const success = await deleteDeliveryZone(zoneId);
+      if (success) {
+        setZones(prev => prev.filter(z => z.id !== zoneId));
+        showToast('success', 'Delivery zone deleted.');
+      } else {
+        showToast('error', 'Failed to delete delivery zone.');
+      }
+    }, true);
   };
 
   const handleToggleSelectOrder = (orderId: string) => {
@@ -882,65 +1070,65 @@ export default function AdminDashboard() {
   // RENDER LOGIN SCREEN IF NOT AUTHENTICATED
   if (!isAuthenticated) {
     return (
-      <main className="min-h-screen bg-gradient-to-tr from-[#2c1b18] via-[#422924] to-[#2c1b18] flex items-center justify-center p-4 relative overflow-hidden">
-        {/* Golden ambient background lights */}
-        <div className="absolute top-1/4 left-10 h-96 w-96 rounded-full bg-[#c5a880]/10 blur-3xl animate-pulse" />
-        <div className="absolute bottom-1/4 right-10 h-96 w-96 rounded-full bg-[#e8c5af]/10 blur-3xl animate-pulse" />
+      <main className="min-h-screen bg-gradient-to-b from-[#1a0f0d] to-[#120807] flex items-center justify-center p-4 relative overflow-hidden font-sans">
+        {/* Luxury glowing orb highlights */}
+        <div className="absolute top-[-10%] right-[-10%] h-[500px] w-[500px] rounded-full bg-[#c5a880]/10 blur-[120px] animate-pulse" />
+        <div className="absolute bottom-[-10%] left-[-10%] h-[500px] w-[500px] rounded-full bg-[#8c3a1b]/10 blur-[120px] animate-pulse" />
 
-        <div className="w-full max-w-md bg-white/95 backdrop-blur-md rounded-[32px] border border-[#c5a880]/30 p-8 space-y-6 shadow-2xl relative z-10 animate-fadeIn">
-          {/* Header */}
-          <div className="text-center space-y-2">
-            <span className="text-4xl block animate-bounce">🧁</span>
-            <h1 className="font-display text-3xl font-light tracking-wide text-primary text-3d-luxury">
+        <div className="w-full max-w-md bg-white/[0.03] backdrop-blur-2xl rounded-[2.5rem] border border-white/10 p-8 sm:p-10 space-y-8 shadow-[0_30px_100px_rgba(0,0,0,0.8)] relative z-10 animate-fadeIn">
+          {/* Brand Header */}
+          <div className="text-center space-y-3">
+            <span className="text-5xl block animate-pulse select-none">🔐</span>
+            <h1 className="font-display text-2xl sm:text-3xl font-extrabold tracking-tight text-white uppercase">
               Pesha's Bake Shop
             </h1>
-            <p className="text-[9px] text-luxury-gold uppercase font-bold tracking-widest">
-              Operations Control Panel Log-in
+            <p className="text-[10px] text-accent font-extrabold uppercase tracking-[0.25em]">
+              Operations Control Panel
             </p>
-            <div className="h-[1px] w-12 bg-[#c5a880]/30 mx-auto mt-2" />
+            <div className="h-[1px] w-12 bg-white/20 mx-auto mt-4" />
           </div>
 
           {loginError && (
-            <div className="rounded-xl bg-rose-50 border border-rose-200 p-3 text-xs font-bold text-rose-800 flex items-center gap-2">
-              <AlertTriangle className="h-4 w-4 text-rose-600 flex-shrink-0" />
+            <div className="rounded-2xl bg-rose-500/10 border border-rose-500/30 p-3.5 text-xs font-bold text-rose-200 flex items-center gap-3">
+              <AlertTriangle className="h-4.5 w-4.5 text-rose-400 flex-shrink-0" />
               <span>{loginError}</span>
             </div>
           )}
 
-          <form onSubmit={handleLoginSubmit} className="space-y-4 font-sans text-xs">
-            <div className="space-y-1.5">
-              <label className="text-[9px] font-extrabold uppercase text-muted-foreground tracking-wider">Email Address</label>
+          <form onSubmit={handleLoginSubmit} className="space-y-5 text-xs">
+            <div className="space-y-2">
+              <label className="text-[10px] font-bold uppercase text-white/60 tracking-wider">Email Address</label>
               <div className="relative">
-                <Mail className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/60" />
+                <Mail className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-white/40" />
                 <input
                   type="email"
                   required
                   value={loginEmail}
                   onChange={(e) => setLoginEmail(e.target.value)}
                   placeholder="super@pesha.lk"
-                  className="w-full rounded-xl border border-border bg-[#faf8f5] py-3 pl-10 pr-4 outline-none focus:border-[#c5a880] transition-colors font-sans"
+                  className="w-full rounded-2xl border border-white/10 bg-white/[0.05] py-3.5 pl-11 pr-4 text-white placeholder-white/30 outline-none focus:border-accent transition-all font-sans text-sm font-semibold"
                 />
               </div>
             </div>
 
-            <div className="space-y-1.5">
-              <label className="text-[9px] font-extrabold uppercase text-muted-foreground tracking-wider">Password</label>
+            <div className="space-y-2">
+              <label className="text-[10px] font-bold uppercase text-white/60 tracking-wider">Password</label>
               <div className="relative">
-                <Lock className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/60" />
+                <Lock className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-white/40" />
                 <input
                   type="password"
                   required
                   value={loginPassword}
                   onChange={(e) => setLoginPassword(e.target.value)}
                   placeholder="••••••••"
-                  className="w-full rounded-xl border border-border bg-[#faf8f5] py-3 pl-10 pr-4 outline-none focus:border-[#c5a880] transition-colors font-sans"
+                  className="w-full rounded-2xl border border-white/10 bg-white/[0.05] py-3.5 pl-11 pr-4 text-white placeholder-white/30 outline-none focus:border-accent transition-all font-sans text-sm"
                 />
               </div>
             </div>
 
             <button
               type="submit"
-              className="w-full rounded-full bg-primary py-3.5 font-bold uppercase tracking-widest text-white hover:bg-secondary hover:shadow-lg transition-all mt-2 flex items-center justify-center gap-1.5 shadow-md"
+              className="w-full rounded-full bg-gradient-to-r from-accent to-[#b59870] py-4 font-bold uppercase tracking-widest text-[#1a0f0d] hover:brightness-110 active:scale-95 transition-all mt-4 flex items-center justify-center gap-2 shadow-[0_8px_25px_rgba(197,168,128,0.25)] cursor-pointer"
             >
               <Unlock className="h-4 w-4" />
               <span>Log In To System</span>
@@ -963,14 +1151,15 @@ export default function AdminDashboard() {
       )}
 
       {/* Side Navigation Panel */}
-      <aside className={`w-64 bg-primary text-white flex flex-col justify-between flex-shrink-0 z-40 fixed inset-y-0 left-0 transform lg:translate-x-0 lg:static transition-transform duration-300 ${
+      <aside className={`w-64 bg-[#130907] text-white flex flex-col justify-between flex-shrink-0 z-40 fixed inset-y-0 left-0 border-r border-white/5 transform lg:translate-x-0 lg:static transition-transform duration-300 ${
         isMobileSidebarOpen ? 'translate-x-0' : '-translate-x-full'
       }`}>
         <div>
-          <div className="h-16 flex items-center justify-between px-6 border-b border-white/10 font-display text-lg font-bold">
+          {/* Logo brand */}
+          <div className="h-16 flex items-center justify-between px-6 border-b border-white/5 font-display text-base font-extrabold uppercase tracking-widest text-accent">
             <div className="flex items-center gap-2">
-              <span className="text-xl">🧁</span>
-              <span>Pesha's Operations</span>
+              <span className="text-xl">🎂</span>
+              <span>Pesha's Admin</span>
             </div>
             <button
               onClick={() => setIsMobileSidebarOpen(false)}
@@ -981,121 +1170,140 @@ export default function AdminDashboard() {
           </div>
 
           {/* Active Admin Details */}
-          <div className="p-4 bg-secondary/30 border-b border-white/10 space-y-1 text-xs">
-            <div className="flex items-center gap-1.5 text-[9px] text-amber-200 font-extrabold uppercase tracking-wider">
-              <ShieldCheck className="h-3.5 w-3.5 text-amber-300" />
-              <span>Logged In Admin</span>
+          <div className="p-5 bg-white/[0.02] border-b border-white/5 space-y-2">
+            <div className="flex items-center gap-1.5 text-[9px] text-accent font-extrabold uppercase tracking-widest">
+              <ShieldCheck className="h-4 w-4 text-accent" />
+              <span>Security Officer</span>
             </div>
-            <p className="font-bold text-white leading-tight truncate">{currentAdmin?.name}</p>
-            <p className="text-[10px] text-amber-100/80 font-medium truncate">{currentAdmin?.role} • {currentAdmin?.email}</p>
+            <div>
+              <p className="font-bold text-white leading-tight truncate text-xs">{currentAdmin?.name}</p>
+              <p className="text-[10px] text-white/50 font-medium truncate mt-0.5">{currentAdmin?.role} • {currentAdmin?.email}</p>
+            </div>
           </div>
 
-          {/* Navigation Links */}
-          <nav className="p-4 space-y-1">
-            <button
-              onClick={() => { setActiveTab('dashboard'); setIsMobileSidebarOpen(false); }}
-              className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${
-                activeTab === 'dashboard' ? 'bg-white text-primary shadow' : 'hover:bg-white/10'
-              }`}
-            >
-              <LayoutDashboard className="h-4 w-4" />
-              <span>Dashboard Overview</span>
-            </button>
-            
-            <button
-              onClick={() => { setActiveTab('orders'); setIsMobileSidebarOpen(false); }}
-              className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${
-                activeTab === 'orders' ? 'bg-white text-primary shadow' : 'hover:bg-white/10'
-              }`}
-            >
-              <ShoppingBag className="h-4 w-4" />
-              <span>Order Manager</span>
-              {metrics && metrics.pendingCount > 0 && (
-                <span className="ml-auto h-5 w-5 bg-rose-500 rounded-full flex items-center justify-center text-[10px] text-white animate-pulse">
-                  {metrics.pendingCount}
-                </span>
-              )}
-            </button>
-
-            <button
-              onClick={() => { setActiveTab('categories'); setIsMobileSidebarOpen(false); }}
-              className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${
-                activeTab === 'categories' ? 'bg-white text-primary shadow' : 'hover:bg-white/10'
-              }`}
-            >
-              <Database className="h-4 w-4" />
-              <span>Category Manager</span>
-            </button>
-            
-            <button
-              onClick={() => { setActiveTab('catalog'); setIsMobileSidebarOpen(false); }}
-              className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${
-                activeTab === 'catalog' ? 'bg-white text-primary shadow' : 'hover:bg-white/10'
-              }`}
-            >
-              <Database className="h-4 w-4" />
-              <span>Catalog & Products</span>
-            </button>
-
-            <button
-              onClick={() => { setActiveTab('customers'); setIsMobileSidebarOpen(false); }}
-              className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${
-                activeTab === 'customers' ? 'bg-white text-primary shadow' : 'hover:bg-white/10'
-              }`}
-            >
-              <Users className="h-4 w-4" />
-              <span>Customer Registry</span>
-            </button>
-
-            {/* Gated tabs based on role permissions */}
-            {getPermission('users') && (
+          {/* Grouped Navigation Links */}
+          <nav className="p-4 space-y-4">
+            {/* Section 1 */}
+            <div className="space-y-1">
+              <span className="text-[9px] font-bold text-white/30 tracking-[0.2em] uppercase pl-4 block select-none">
+                Operations
+              </span>
               <button
-                onClick={() => { setActiveTab('users'); setIsMobileSidebarOpen(false); }}
+                onClick={() => { setActiveTab('dashboard'); setIsMobileSidebarOpen(false); }}
                 className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${
-                  activeTab === 'users' ? 'bg-white text-primary shadow' : 'hover:bg-white/10'
+                  activeTab === 'dashboard' ? 'bg-accent text-[#130907] shadow-[0_4px_15px_rgba(197,168,128,0.25)]' : 'text-white/60 hover:bg-white/5 hover:text-white'
                 }`}
               >
-                <UserCheck className="h-4 w-4" />
-                <span>User Management</span>
+                <LayoutDashboard className="h-4 w-4" />
+                <span>Dashboard Overview</span>
               </button>
-            )}
+              
+              <button
+                onClick={() => { setActiveTab('orders'); setIsMobileSidebarOpen(false); }}
+                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${
+                  activeTab === 'orders' ? 'bg-accent text-[#130907] shadow-[0_4px_15px_rgba(197,168,128,0.25)]' : 'text-white/60 hover:bg-white/5 hover:text-white'
+                }`}
+              >
+                <ShoppingBag className="h-4 w-4" />
+                <span>Order Manager</span>
+                {metrics && metrics.pendingCount > 0 && (
+                  <span className="ml-auto h-5 w-5 bg-rose-600 rounded-full flex items-center justify-center text-[10px] font-bold text-white animate-pulse">
+                    {metrics.pendingCount}
+                  </span>
+                )}
+              </button>
 
-            <button
-              onClick={() => { setActiveTab('settings'); setIsMobileSidebarOpen(false); }}
-              className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${
-                activeTab === 'settings' ? 'bg-white text-primary shadow' : 'hover:bg-white/10'
-              }`}
-            >
-              <Settings className="h-4 w-4" />
-              <span>Website CMS Settings</span>
-            </button>
-            
-            <button
-              onClick={() => { setActiveTab('delivery'); setIsMobileSidebarOpen(false); }}
-              className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${
-                activeTab === 'delivery' ? 'bg-white text-primary shadow' : 'hover:bg-white/10'
-              }`}
-            >
-              <MapPin className="h-4 w-4" />
-              <span>Delivery Zones</span>
-            </button>
+              <button
+                onClick={() => { setActiveTab('customers'); setIsMobileSidebarOpen(false); }}
+                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${
+                  activeTab === 'customers' ? 'bg-accent text-[#130907] shadow-[0_4px_15px_rgba(197,168,128,0.25)]' : 'text-white/60 hover:bg-white/5 hover:text-white'
+                }`}
+              >
+                <Users className="h-4 w-4" />
+                <span>Customer Registry</span>
+              </button>
+            </div>
+
+            {/* Section 2 */}
+            <div className="space-y-1">
+              <span className="text-[9px] font-bold text-white/30 tracking-[0.2em] uppercase pl-4 block select-none">
+                Catalog
+              </span>
+              <button
+                onClick={() => { setActiveTab('categories'); setIsMobileSidebarOpen(false); }}
+                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${
+                  activeTab === 'categories' ? 'bg-accent text-[#130907] shadow-[0_4px_15px_rgba(197,168,128,0.25)]' : 'text-white/60 hover:bg-white/5 hover:text-white'
+                }`}
+              >
+                <Database className="h-4 w-4" />
+                <span>Category Manager</span>
+              </button>
+              
+              <button
+                onClick={() => { setActiveTab('catalog'); setIsMobileSidebarOpen(false); }}
+                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${
+                  activeTab === 'catalog' ? 'bg-accent text-[#130907] shadow-[0_4px_15px_rgba(197,168,128,0.25)]' : 'text-white/60 hover:bg-white/5 hover:text-white'
+                }`}
+              >
+                <Database className="h-4 w-4" />
+                <span>Catalog & Products</span>
+              </button>
+            </div>
+
+            {/* Section 3 */}
+            <div className="space-y-1">
+              <span className="text-[9px] font-bold text-white/30 tracking-[0.2em] uppercase pl-4 block select-none">
+                System Config
+              </span>
+              {getPermission('users') && (
+                <button
+                  onClick={() => { setActiveTab('users'); setIsMobileSidebarOpen(false); }}
+                  className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${
+                    activeTab === 'users' ? 'bg-accent text-[#130907] shadow-[0_4px_15px_rgba(197,168,128,0.25)]' : 'text-white/60 hover:bg-white/5 hover:text-white'
+                  }`}
+                >
+                  <UserCheck className="h-4 w-4" />
+                  <span>User Management</span>
+                </button>
+              )}
+
+              <button
+                onClick={() => { setActiveTab('settings'); setIsMobileSidebarOpen(false); }}
+                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${
+                  activeTab === 'settings' ? 'bg-accent text-[#130907] shadow-[0_4px_15px_rgba(197,168,128,0.25)]' : 'text-white/60 hover:bg-white/5 hover:text-white'
+                }`}
+              >
+                <Settings className="h-4 w-4" />
+                <span>Website CMS Settings</span>
+              </button>
+              
+              <button
+                onClick={() => { setActiveTab('delivery'); setIsMobileSidebarOpen(false); }}
+                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${
+                  activeTab === 'delivery' ? 'bg-accent text-[#130907] shadow-[0_4px_15px_rgba(197,168,128,0.25)]' : 'text-white/60 hover:bg-white/5 hover:text-white'
+                }`}
+              >
+                <MapPin className="h-4 w-4" />
+                <span>Delivery Zones</span>
+              </button>
+            </div>
           </nav>
         </div>
 
         {/* Logout Actions */}
-        <div className="p-4 border-t border-white/10 flex items-center justify-between text-xs bg-secondary/15">
-          <div className="flex items-center gap-2">
-            <div className="h-7 w-7 rounded-full bg-white/20 flex items-center justify-center">
-              <User className="h-4.5 w-4.5" />
+        <div className="p-4 border-t border-white/5 flex items-center justify-between text-xs bg-white/[0.01]">
+          <div className="flex items-center gap-2.5">
+            <div className="h-8 w-8 rounded-full bg-white/10 flex items-center justify-center font-bold text-accent text-xs">
+              {currentAdmin?.name.charAt(0)}
             </div>
             <div>
-              <p className="font-bold leading-none">Console</p>
-              <p className="text-[10px] text-amber-200/80 mt-0.5">{currentAdmin?.role}</p>
+              <p className="font-bold leading-none text-white text-[11px]">Console</p>
+              <p className="text-[9px] text-white/40 mt-1">{currentAdmin?.role}</p>
             </div>
           </div>
           <button
             onClick={handleLogout}
-            className="p-1.5 hover:bg-rose-600/30 rounded text-rose-300 hover:text-white transition-all"
+            className="p-2 hover:bg-rose-500/20 rounded-xl text-rose-400 hover:text-white transition-all cursor-pointer"
             title="Log Out"
           >
             <LogOut className="h-4.5 w-4.5" />
@@ -1104,10 +1312,10 @@ export default function AdminDashboard() {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 flex flex-col overflow-hidden">
+      <main className="flex-1 flex flex-col overflow-hidden bg-background">
         
         {/* Header bar responsive */}
-        <header className="h-16 border-b border-border bg-white flex items-center justify-between px-6 sm:px-8 flex-shrink-0">
+        <header className="h-16 border-b border-border bg-white flex items-center justify-between px-6 sm:px-8 flex-shrink-0 shadow-[0_1px_3px_rgba(0,0,0,0.01)]">
           <div className="flex items-center gap-3">
             <button
               onClick={() => setIsMobileSidebarOpen(true)}
@@ -1115,7 +1323,8 @@ export default function AdminDashboard() {
             >
               <Menu className="h-5 w-5" />
             </button>
-            <h2 className="font-display text-lg sm:text-xl font-extrabold text-primary uppercase tracking-wide">
+            <h2 className="font-display text-base font-extrabold text-foreground uppercase tracking-wider flex items-center gap-2">
+              <span className="w-1.5 h-4 bg-primary rounded-full" />
               {activeTab === 'dashboard' && 'Dashboard Overview'}
               {activeTab === 'orders' && 'Order Management'}
               {activeTab === 'categories' && 'Category Management'}
@@ -1129,30 +1338,65 @@ export default function AdminDashboard() {
         </header>
 
         {/* Tab Viewports */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-8 bg-[#f8f6f0]">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-8 bg-[#fdfcfb]">
 
           {/* TAB 1: DASHBOARD OVERVIEW */}
           {activeTab === 'dashboard' && (
-            <div className="space-y-8 animate-fadeIn">
+            <div className="space-y-8 animate-fadeIn text-xs">
               
               {/* Metrics Summary Row */}
               {metrics && (
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
-                  <div className="bg-white rounded-2xl border border-border p-4 sm:p-6 shadow-sm">
-                    <p className="text-[9px] sm:text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Total Sales Revenue</p>
-                    <p className="text-xl sm:text-2xl font-black text-primary mt-2">LKR {metrics.totalSales.toLocaleString()}</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                  {/* Metric 1 */}
+                  <div className="bg-white rounded-[2rem] border border-border p-6 shadow-luxury shadow-luxury-hover hover:border-accent/40 relative overflow-hidden group">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Total Sales Revenue</p>
+                        <p className="text-2xl font-black text-foreground mt-2 leading-none">LKR {metrics.totalSales.toLocaleString()}</p>
+                      </div>
+                      <div className="p-3 bg-amber-50/50 rounded-2xl text-accent group-hover:scale-110 transition-transform duration-300">
+                        <ShoppingBag className="h-6 w-6 text-accent" />
+                      </div>
+                    </div>
                   </div>
-                  <div className="bg-white rounded-2xl border border-border p-4 sm:p-6 shadow-sm">
-                    <p className="text-[9px] sm:text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Orders Logged</p>
-                    <p className="text-xl sm:text-2xl font-black text-primary mt-2">{metrics.totalOrdersCount}</p>
+                  
+                  {/* Metric 2 */}
+                  <div className="bg-white rounded-[2rem] border border-border p-6 shadow-luxury shadow-luxury-hover hover:border-[#8c3a1b]/40 relative overflow-hidden group">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Orders Logged</p>
+                        <p className="text-2xl font-black text-foreground mt-2 leading-none">{metrics.totalOrdersCount}</p>
+                      </div>
+                      <div className="p-3 bg-amber-50/50 rounded-2xl text-[#8c3a1b] group-hover:scale-110 transition-transform duration-300">
+                        <Layers className="h-6 w-6 text-primary" />
+                      </div>
+                    </div>
                   </div>
-                  <div className="bg-white rounded-2xl border border-border p-4 sm:p-6 shadow-sm">
-                    <p className="text-[9px] sm:text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Pending Actions</p>
-                    <p className="text-xl sm:text-2xl font-black text-rose-600 mt-2">{metrics.pendingCount}</p>
+
+                  {/* Metric 3 */}
+                  <div className="bg-white rounded-[2rem] border border-border p-6 shadow-luxury shadow-luxury-hover hover:border-rose-200 relative overflow-hidden group">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Pending Actions</p>
+                        <p className="text-2xl font-black text-rose-600 mt-2 leading-none">{metrics.pendingCount}</p>
+                      </div>
+                      <div className="p-3 bg-rose-50/50 rounded-2xl text-rose-600 group-hover:scale-110 transition-transform duration-300">
+                        <Clock className="h-6 w-6 text-rose-600" />
+                      </div>
+                    </div>
                   </div>
-                  <div className="bg-white rounded-2xl border border-border p-4 sm:p-6 shadow-sm">
-                    <p className="text-[9px] sm:text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Active in Kitchen</p>
-                    <p className="text-xl sm:text-2xl font-black text-amber-600 mt-2">{metrics.preparingCount}</p>
+
+                  {/* Metric 4 */}
+                  <div className="bg-white rounded-[2rem] border border-border p-6 shadow-luxury shadow-luxury-hover hover:border-amber-200 relative overflow-hidden group">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Active in Kitchen</p>
+                        <p className="text-2xl font-black text-amber-600 mt-2 leading-none">{metrics.preparingCount}</p>
+                      </div>
+                      <div className="p-3 bg-amber-50/50 rounded-2xl text-amber-600 group-hover:scale-110 transition-transform duration-300">
+                        <CheckCircle2 className="h-6 w-6 text-amber-600" />
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}
@@ -1181,7 +1425,6 @@ export default function AdminDashboard() {
                   trend[dateStr] = 0;
                 }
                 orders.forEach(order => {
-                  // Handle both deliveryDate and createdAt for better data coverage
                   const orderDate = order.deliveryDate || order.createdAt?.split('T')[0];
                   if (orderDate && trend[orderDate] !== undefined) {
                     trend[orderDate] += 1;
@@ -1195,29 +1438,29 @@ export default function AdminDashboard() {
                 const maxOrders = Math.max(...ordersTrend.map(t => t.count), 1);
 
                 return (
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                     {/* Chart 1: Sales Revenue by Category */}
-                    <div className="bg-white rounded-3xl border border-border p-5 sm:p-6 shadow-sm space-y-4">
+                    <div className="bg-white rounded-[2rem] border border-border p-6 sm:p-8 shadow-luxury space-y-6">
                       <div>
-                        <h3 className="font-display text-sm font-extrabold text-primary">Sales Revenue by Category</h3>
-                        <p className="text-[9px] text-muted-foreground font-semibold uppercase">Category performance distribution</p>
+                        <h3 className="font-display text-sm font-extrabold text-foreground">Sales Revenue by Category</h3>
+                        <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider mt-1">Category performance distribution</p>
                       </div>
-                      <div className="space-y-4 pt-2">
+                      <div className="space-y-5">
                         {salesByCategory.length === 0 ? (
-                          <p className="text-xs text-muted-foreground py-8 text-center font-semibold">No sales recorded yet.</p>
+                          <p className="text-xs text-muted-foreground py-12 text-center font-semibold">No sales recorded yet.</p>
                         ) : (
                           salesByCategory.map((cat, idx) => {
                             const pct = (cat.total / maxSales) * 100;
                             return (
-                              <div key={idx} className="space-y-1">
+                              <div key={idx} className="space-y-2">
                                 <div className="flex justify-between text-xs font-bold font-sans">
-                                  <span className="text-primary">{cat.name}</span>
-                                  <span className="text-muted-foreground">LKR {cat.total.toLocaleString()}</span>
+                                  <span className="text-foreground">{cat.name}</span>
+                                  <span className="text-primary font-extrabold">LKR {cat.total.toLocaleString()}</span>
                                 </div>
-                                <div className="w-full bg-[#faf8f5] h-3 rounded-full overflow-hidden border border-border/60">
+                                <div className="w-full bg-[#fdfcfb] h-3 rounded-full overflow-hidden border border-border">
                                   <div
                                     style={{ width: `${pct}%` }}
-                                    className="bg-gradient-to-r from-primary to-luxury-gold h-full rounded-full transition-all duration-1000"
+                                    className="bg-gradient-to-r from-primary to-accent h-full rounded-full transition-all duration-1000"
                                   />
                                 </div>
                               </div>
@@ -1228,24 +1471,29 @@ export default function AdminDashboard() {
                     </div>
 
                     {/* Chart 2: Daily Order Volume */}
-                    <div className="bg-white rounded-3xl border border-border p-5 sm:p-6 shadow-sm space-y-4">
+                    <div className="bg-white rounded-[2rem] border border-border p-6 sm:p-8 shadow-luxury space-y-6">
                       <div>
-                        <h3 className="font-display text-sm font-extrabold text-primary">Daily Order Volume</h3>
-                        <p className="text-[9px] text-muted-foreground font-semibold uppercase">Logged deliveries over the past week</p>
+                        <h3 className="font-display text-sm font-extrabold text-foreground">Daily Order Volume</h3>
+                        <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider mt-1">Logged deliveries over the past week</p>
                       </div>
-                      <div className="flex items-end justify-between h-44 pt-4 pb-2 px-2 border-b border-border/80">
+                      <div className="flex items-end justify-between h-44 pt-6 pb-2 px-3 border-b border-border relative">
+                        {/* Horizontal guide grids */}
+                        <div className="absolute left-0 right-0 top-1/4 border-t border-dashed border-border/40 pointer-events-none" />
+                        <div className="absolute left-0 right-0 top-2/4 border-t border-dashed border-border/40 pointer-events-none" />
+                        <div className="absolute left-0 right-0 top-3/4 border-t border-dashed border-border/40 pointer-events-none" />
+                        
                         {ordersTrend.map((t, idx) => {
-                          const barHeight = (t.count / maxOrders) * 100; // max height 100px
+                          const barHeight = (t.count / maxOrders) * 120; // scale max height cleanly
                           return (
                             <div key={idx} className="flex flex-col items-center gap-2 group relative flex-1">
-                              <div className="absolute -top-8 bg-primary text-white text-[9px] font-extrabold px-1.5 py-0.5 rounded shadow opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10 pointer-events-none">
+                              <div className="absolute -top-10 bg-[#1e110e] text-[#fdfcfb] text-[9px] font-extrabold px-2 py-1 rounded-xl shadow-lg opacity-0 group-hover:opacity-100 transition-all duration-300 -translate-y-1 pointer-events-none z-10 whitespace-nowrap">
                                 {t.count} Orders
                               </div>
                               <div
-                                style={{ height: `${Math.max(barHeight, 6)}px` }}
-                                className="w-8 sm:w-10 bg-gradient-to-t from-primary/80 to-luxury-gold/90 hover:from-primary hover:to-luxury-gold rounded-t-lg transition-all duration-500 shadow-sm"
+                                style={{ height: `${Math.max(barHeight, 8)}px` }}
+                                className="w-7 sm:w-9 bg-gradient-to-t from-primary/80 to-accent/90 hover:from-primary hover:to-accent rounded-t-lg transition-all duration-500 shadow-sm cursor-pointer"
                               />
-                              <span className="text-[9px] font-bold text-muted-foreground uppercase font-sans mt-1">
+                              <span className="text-[9px] font-bold text-muted-foreground uppercase font-sans mt-2 select-none">
                                 {t.label}
                               </span>
                             </div>
@@ -1257,94 +1505,95 @@ export default function AdminDashboard() {
                 );
               })()}
 
-              {/* Lead time warnings */}
-              <div className="space-y-3">
-                <h3 className="font-display text-sm font-extrabold text-primary flex items-center gap-1.5">
-                  <AlertTriangle className="h-4.5 w-4.5 text-amber-600" />
-                  <span>Lead-Time Conflicts</span>
-                </h3>
-                {conflicts.length === 0 ? (
-                  <div className="rounded-2xl border border-emerald-200 bg-emerald-50/50 p-4 text-xs font-semibold text-emerald-800">
-                    All active schedules comply with catalog lead times. No warnings.
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {conflicts.map((conf, i) => (
-                      <div key={i} className="rounded-2xl border border-amber-300 bg-amber-50/40 p-4 space-y-1.5 text-xs font-semibold">
-                        <p className="text-amber-800 font-bold">Order ID: {conf.orderId} ({conf.customerName})</p>
-                        <p className="text-muted-foreground">Delivery: <span className="text-rose-600 font-bold">{conf.deliveryDate}</span></p>
-                        <p className="text-muted-foreground">Available Time: {conf.hoursDifference}h vs Required: {conf.leadTimeRequiredHours}h</p>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Simulated email log */}
-              <div className="bg-white rounded-3xl border border-border p-4 sm:p-6 shadow-sm space-y-4">
-                <h3 className="font-display text-sm font-extrabold text-primary flex items-center gap-1.5">
-                  <Mail className="h-4.5 w-4.5 text-primary" />
-                  <span>Simulated Email Dispatch Log</span>
-                </h3>
-                <div className="space-y-3 max-h-[250px] overflow-y-auto pr-1">
-                  {simulatedEmails.length === 0 ? (
-                    <p className="text-xs text-muted-foreground font-semibold">No emails sent yet. Mutate order statuses to trigger email simulation.</p>
+              {/* Operations logs row */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 pt-2">
+                {/* Lead time warnings card */}
+                <div className="bg-white rounded-[2rem] border border-border p-6 sm:p-8 shadow-luxury space-y-6">
+                  <h3 className="font-display text-sm font-extrabold text-foreground flex items-center gap-2 border-b border-border/50 pb-3 select-none">
+                    <AlertTriangle className="h-4.5 w-4.5 text-amber-500" />
+                    <span>Lead-Time Verification Panel</span>
+                  </h3>
+                  {conflicts.length === 0 ? (
+                    <div className="rounded-2xl border border-emerald-100 bg-emerald-50/20 p-5 text-xs font-bold text-emerald-800 leading-relaxed shadow-sm">
+                      ✨ All active schedules comply with catalog lead times. No conflicts detected.
+                    </div>
                   ) : (
-                    simulatedEmails.map((email, i) => (
-                      <div key={i} className="rounded-xl border border-border/60 p-3 bg-background space-y-1 text-xs">
-                        <div className="flex justify-between font-bold text-[10px] text-primary">
-                          <span>📧 ID: {email.id}</span>
-                          <span className="text-muted-foreground">{email.sentAt ? email.sentAt.split('T')[1].substring(0, 8) : 'Recently'}</span>
+                    <div className="space-y-3 max-h-[280px] overflow-y-auto pr-1">
+                      {conflicts.map((conf, i) => (
+                        <div key={i} className="rounded-2xl border border-amber-200 bg-amber-50/30 p-4 space-y-2 text-xs font-bold shadow-sm">
+                          <p className="text-secondary font-extrabold">Order ID: <span className="text-primary">{conf.orderId}</span> ({conf.customerName})</p>
+                          <p className="text-muted-foreground">Delivery Requested: <span className="text-rose-600 font-extrabold">{conf.deliveryDate}</span></p>
+                          <p className="text-muted-foreground font-semibold">Available prep time: {conf.hoursDifference}h vs Bakery required: {conf.leadTimeRequiredHours}h</p>
                         </div>
-                        <p className="font-semibold text-foreground-custom">To: <span className="font-bold">{email.to}</span> &amp; Admin ({email.adminTo})</p>
-                        <p className="font-bold text-primary">{email.subject}</p>
-                        <p className="text-muted-foreground font-medium bg-muted/30 p-2 rounded mt-1">{email.body}</p>
-                      </div>
-                    ))
+                      ))}
+                    </div>
                   )}
+                </div>
+
+                {/* Simulated email log card */}
+                <div className="bg-white rounded-[2rem] border border-border p-6 sm:p-8 shadow-luxury space-y-6">
+                  <h3 className="font-display text-sm font-extrabold text-foreground flex items-center gap-2 border-b border-border/50 pb-3 select-none">
+                    <Mail className="h-4.5 w-4.5 text-[#8c3a1b]" />
+                    <span>Simulated Notification Logs</span>
+                  </h3>
+                  <div className="space-y-3 max-h-[280px] overflow-y-auto pr-1">
+                    {simulatedEmails.length === 0 ? (
+                      <p className="text-xs text-muted-foreground py-12 text-center font-bold uppercase tracking-wider">No notifications sent yet. Mutate order statuses to trigger simulation.</p>
+                    ) : (
+                      simulatedEmails.map((email, i) => (
+                        <div key={i} className="rounded-2xl border border-border p-4 bg-[#faf8f6] space-y-2 text-xs">
+                          <div className="flex justify-between font-bold text-[10px] text-primary">
+                            <span>📧 ID: {email.id}</span>
+                            <span className="text-muted-foreground font-semibold">{email.sentAt ? email.sentAt.split('T')[1].substring(0, 8) : 'Recently'}</span>
+                          </div>
+                          <p className="font-bold text-foreground">To: <span className="text-secondary">{email.to}</span> & Admin ({email.adminTo})</p>
+                          <p className="font-extrabold text-[#8c3a1b] leading-tight">{email.subject}</p>
+                          <p className="text-muted-foreground font-semibold bg-white border border-border/60 p-3 rounded-xl mt-1 leading-relaxed">{email.body}</p>
+                        </div>
+                      ))
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
           )}
-
-          {/* TAB 2: ORDER MANAGER */}
           {activeTab === 'orders' && (
-            <div className="space-y-6 animate-fadeIn">
+            <div className="space-y-6 animate-fadeIn text-xs">
               {/* Live indicator + refresh */}
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between border-b border-border/40 pb-4">
                 <div className="flex items-center gap-2">
-                  <span className="relative flex h-2.5 w-2.5">
+                  <span className="relative flex h-2 w-2">
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500" />
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
                   </span>
-                  <span className="text-[11px] font-bold text-emerald-700">Live</span>
+                  <span className="text-xs font-extrabold uppercase tracking-wider text-emerald-600">Live Server Connection</span>
                   {lastUpdated && (
-                    <span className="text-[10px] text-muted-foreground font-medium">
-                      · Updated {lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                    <span className="text-xs text-muted-foreground font-semibold">
+                      · Synchronized {lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
                     </span>
                   )}
                 </div>
                 <button
                   onClick={() => loadAdminData()}
                   disabled={isRefreshing}
-                  className="flex items-center gap-1.5 rounded-full border border-border bg-white px-3 py-1.5 text-[11px] font-bold text-muted-foreground hover:bg-muted/30 transition-all disabled:opacity-50"
+                  className="flex items-center gap-1.5 rounded-full border border-border bg-[#faf8f6] px-4 py-2 text-xs font-bold text-[#5e463a] hover:bg-[#eae2d8] transition-all disabled:opacity-50 cursor-pointer shadow-sm"
                 >
                   <RefreshCw className={`h-3 w-3 ${isRefreshing ? 'animate-spin' : ''}`} />
-                  {isRefreshing ? 'Refreshing…' : 'Refresh'}
+                  {isRefreshing ? 'Refreshing…' : 'Refresh Feed'}
                 </button>
               </div>
 
-              {/* Filters toolbar */}
-              <div className="flex items-center gap-1.5 overflow-x-auto w-full pb-2 scrollbar-none">
+              {/* Filters toolbar (Segmented Control style) */}
+              <div className="flex items-center gap-2 overflow-x-auto w-full pb-2 scrollbar-none border-b border-border/30">
                 {['all', 'pending', 'confirmed', 'preparing', 'out_for_delivery', 'delivered', 'cancelled'].map((status) => (
                   <button
                     key={status}
                     onClick={() => setOrderFilter(status)}
-                    className={`rounded-full px-4 py-2 text-xs font-bold whitespace-nowrap transition-all border ${
+                    className={`rounded-full px-5 py-2.5 text-xs font-bold whitespace-nowrap transition-all border ${
                       orderFilter === status
-                        ? 'bg-primary text-white border-primary shadow-sm'
-                        : 'bg-white text-foreground-custom border-border hover:bg-muted'
-                    }`}
+                        ? 'bg-primary text-white border-primary shadow-md scale-95'
+                        : 'bg-white text-[#5e463a] border-border hover:bg-muted/40'
+                    } cursor-pointer`}
                   >
                     {status === 'all' ? 'All Orders' : status.replace('_', ' ').toUpperCase()}
                   </button>
@@ -1353,199 +1602,309 @@ export default function AdminDashboard() {
 
               {/* Bulk actions */}
               {selectedOrders.length > 0 && (
-                <div className="bg-amber-50 border border-primary/20 rounded-2xl p-4 flex flex-col sm:flex-row gap-4 items-center justify-between animate-fadeIn">
-                  <p className="text-xs font-bold text-primary">Selected {selectedOrders.length} orders for bulk transition:</p>
-                  <div className="flex gap-2">
-                    <button onClick={() => handleBulkStatusUpdate('confirmed')} className="rounded-full bg-primary px-4 py-2 text-xs font-bold text-white hover:bg-secondary transition-all">Confirm Acceptance</button>
-                    <button onClick={() => handleBulkStatusUpdate('preparing')} className="rounded-full bg-amber-600 px-4 py-2 text-xs font-bold text-white hover:bg-amber-700 transition-all">Start Baking</button>
-                    <button onClick={() => handleBulkStatusUpdate('out_for_delivery')} className="rounded-full bg-emerald-600 px-4 py-2 text-xs font-bold text-white hover:bg-emerald-700 transition-all">Dispatched Rider</button>
-                    <button onClick={() => setSelectedOrders([])} className="rounded-full bg-white border border-border px-4 py-2 text-xs font-bold text-foreground hover:bg-muted transition-all">Cancel Selection</button>
+                <div className="bg-amber-50/60 border border-accent/30 rounded-3xl p-5 flex flex-col sm:flex-row gap-4 items-center justify-between animate-fadeIn shadow-sm">
+                  <p className="text-xs font-bold text-secondary">Bulk Actions: Selected <strong className="text-primary">{selectedOrders.length}</strong> orders for status transition:</p>
+                  <div className="flex flex-wrap gap-2">
+                    <button onClick={() => handleBulkStatusUpdate('confirmed')} className="rounded-full bg-primary px-4 py-2 text-xs font-bold text-white hover:bg-secondary transition-all cursor-pointer shadow-sm">Confirm Acceptance</button>
+                    <button onClick={() => handleBulkStatusUpdate('preparing')} className="rounded-full bg-amber-600 px-4 py-2 text-xs font-bold text-white hover:bg-amber-700 transition-all cursor-pointer shadow-sm">Start Baking</button>
+                    <button onClick={() => handleBulkStatusUpdate('out_for_delivery')} className="rounded-full bg-emerald-600 px-4 py-2 text-xs font-bold text-white hover:bg-emerald-700 transition-all cursor-pointer shadow-sm">Dispatched Rider</button>
+                    <button onClick={() => setSelectedOrders([])} className="rounded-full bg-white border border-border px-4 py-2 text-xs font-bold text-foreground hover:bg-muted transition-all cursor-pointer">Cancel Selection</button>
                   </div>
                 </div>
               )}
 
+              {/* Orders Search & Sort Panel */}
+              <div className="flex flex-col sm:flex-row gap-4 items-center justify-between bg-white border border-border p-4 rounded-[1.5rem] shadow-luxury">
+                <div className="relative w-full sm:max-w-xs">
+                  <input
+                    type="text"
+                    placeholder="Search ID, customer, phone, or item..."
+                    value={orderSearch}
+                    onChange={(e) => { setOrderSearch(e.target.value); setOrderPage(1); }}
+                    className="w-full rounded-xl border border-border bg-[#faf8f5] pl-9 pr-4 py-2.5 text-xs outline-none focus:border-accent font-semibold text-foreground"
+                  />
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                </div>
+                <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
+                  <span className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider select-none">Sort By</span>
+                  <select
+                    value={orderSortBy}
+                    onChange={(e) => { setOrderSortBy(e.target.value as any); setOrderPage(1); }}
+                    className="rounded-xl border border-border bg-white px-3 py-2 text-xs font-semibold outline-none focus:border-accent text-foreground"
+                  >
+                    <option value="id">Order ID</option>
+                    <option value="total">Total Price</option>
+                    <option value="date">Delivery Date</option>
+                  </select>
+                  <button
+                    onClick={() => { setOrderSortOrder(prev => prev === 'asc' ? 'desc' : 'asc'); setOrderPage(1); }}
+                    className="p-2 rounded-xl border border-border bg-[#faf8f6] hover:bg-muted/40 text-primary transition-all cursor-pointer"
+                    title={orderSortOrder === 'asc' ? 'Sort Ascending' : 'Sort Descending'}
+                  >
+                    {orderSortOrder === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />}
+                  </button>
+                </div>
+              </div>
+
               {/* Orders Grid Table */}
-              <div className="bg-white rounded-3xl border border-border overflow-hidden shadow-sm">
-                <div className="overflow-x-auto">
+              <div className="bg-white rounded-[2rem] border border-border overflow-hidden shadow-luxury">
+                <div className="overflow-x-auto overflow-y-auto max-h-[600px] relative scrollbar-thin">
                   <table className="w-full text-left text-xs border-collapse">
                     <thead>
-                      <tr className="bg-muted/30 border-b border-border uppercase font-bold text-muted-foreground text-[10px] tracking-wider">
-                        <th className="p-4 w-12 text-center">
+                      <tr className="sticky top-0 bg-[#faf8f6] border-b border-border uppercase font-bold text-foreground text-[9px] tracking-wider z-10 shadow-[0_1px_0_rgba(0,0,0,0.05)]">
+                        <th className="p-4 w-12 text-center sticky top-0 bg-[#faf8f6] z-10">
                           <input
                             type="checkbox"
-                            checked={selectedOrders.length === filteredOrders.length && filteredOrders.length > 0}
+                            checked={selectedOrders.length === paginatedOrders.length && paginatedOrders.length > 0}
                             onChange={(e) => {
-                              if (e.target.checked) setSelectedOrders(filteredOrders.map(o => o.id));
+                              if (e.target.checked) setSelectedOrders(paginatedOrders.map(o => o.id));
                               else setSelectedOrders([]);
                             }}
-                            className="rounded"
+                            className="rounded border-border text-primary focus:ring-primary"
                           />
                         </th>
-                        <th className="p-4">Order ID</th>
-                        <th className="p-4">Customer Details</th>
-                        <th className="p-4">Delivery details</th>
-                        <th className="p-4">Payment Method</th>
-                        <th className="p-4">Receipt</th>
-                        <th className="p-4">Total Price</th>
-                        <th className="p-4">Status</th>
-                        <th className="p-4 text-center">Update Progress</th>
+                        <th className="p-4 sticky top-0 bg-[#faf8f6] z-10">Order ID</th>
+                        <th className="p-4 sticky top-0 bg-[#faf8f6] z-10">Customer Details</th>
+                        <th className="p-4 sticky top-0 bg-[#faf8f6] z-10">Items Ordered</th>
+                        <th className="p-4 sticky top-0 bg-[#faf8f6] z-10">Delivery details</th>
+                        <th className="p-4 sticky top-0 bg-[#faf8f6] z-10">Payment Method</th>
+                        <th className="p-4 sticky top-0 bg-[#faf8f6] z-10">Receipt</th>
+                        <th className="p-4 sticky top-0 bg-[#faf8f6] z-10">Total Price</th>
+                        <th className="p-4 sticky top-0 bg-[#faf8f6] z-10">Status</th>
+                        <th className="p-4 text-center sticky top-0 bg-[#faf8f6] z-10">Update Progress</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-border/60 font-medium">
-                      {filteredOrders.map((order) => (
-                        <tr key={order.id} className="hover:bg-muted/10 transition-colors">
-                          <td className="p-4 text-center">
-                            <input
-                              type="checkbox"
-                              checked={selectedOrders.includes(order.id)}
-                              onChange={() => handleToggleSelectOrder(order.id)}
-                              className="rounded"
-                            />
-                          </td>
-                          <td className="p-4 font-bold text-primary">{order.id}</td>
-                          <td className="p-4 space-y-0.5">
-                            <p className="font-bold">{order.customer.firstName} {order.customer.lastName}</p>
-                            <p className="text-muted-foreground">{order.customer.phone}</p>
-                          </td>
-                          <td className="p-4 space-y-0.5">
-                            <p className="font-bold">{order.deliveryDate} ({order.deliveryTimeSlot.split(' ')[0]} slot)</p>
-                            <p className="text-muted-foreground">{order.address.line1}, {order.address.city}</p>
-                          </td>
-                          <td className="p-4 capitalize">{order.paymentMethod === 'transfer' ? 'Bank Transfer' : 'COD'}</td>
-                          <td className="p-4">
-                            {order.receiptUrl ? (
-                              <button
-                                onClick={() => setActiveReceiptUrl(order.receiptUrl || null)}
-                                className="rounded bg-primary/10 px-2 py-1 text-[10px] font-bold text-primary hover:bg-primary hover:text-white transition-all flex items-center gap-1"
-                              >
-                                <Eye className="h-3.5 w-3.5" />
-                                <span>Inspect</span>
-                              </button>
-                            ) : (
-                              <span className="text-muted-foreground/60 text-[10px] font-semibold">N/A</span>
-                            )}
-                          </td>
-                          <td className="p-4 font-bold text-primary">LKR {order.total.toLocaleString()}</td>
-                          <td className="p-4">
-                            <span className={`rounded-full px-2.5 py-1 text-[9px] font-bold tracking-wider uppercase ${
-                              order.status === 'pending' && 'bg-rose-50 text-rose-700 border border-rose-200'
-                            } ${
-                              order.status === 'confirmed' && 'bg-blue-50 text-blue-700 border border-blue-200'
-                            } ${
-                              order.status === 'preparing' && 'bg-amber-50 text-amber-700 border border-amber-200'
-                            } ${
-                              order.status === 'out_for_delivery' && 'bg-purple-50 text-purple-700 border border-purple-200'
-                            } ${
-                              order.status === 'delivered' && 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                            } ${
-                              order.status === 'cancelled' && 'bg-slate-100 text-slate-500 border border-slate-200'
-                            }`}>
-                              {order.status}
-                            </span>
-                          </td>
-                          <td className="p-4">
-                            <div className="flex gap-1 justify-center">
-                              {order.status === 'pending' && (
-                                <button onClick={() => handleStatusChange(order.id, 'confirmed')} className="rounded bg-primary px-2 py-1 text-[10px] font-bold text-white hover:bg-secondary">Accept</button>
-                              )}
-                              {order.status === 'confirmed' && (
-                                <button onClick={() => handleStatusChange(order.id, 'preparing')} className="rounded bg-amber-600 px-2 py-1 text-[10px] font-bold text-white hover:bg-amber-700">Bake</button>
-                              )}
-                              {order.status === 'preparing' && (
-                                <button onClick={() => handleStatusChange(order.id, 'out_for_delivery')} className="rounded bg-purple-600 px-2 py-1 text-[10px] font-bold text-white hover:bg-purple-700">Ship</button>
-                              )}
-                              {order.status === 'out_for_delivery' && (
-                                <button onClick={() => handleStatusChange(order.id, 'delivered')} className="rounded bg-emerald-600 px-2 py-1 text-[10px] font-bold text-white hover:bg-emerald-700">Complete</button>
-                              )}
-                              {order.status !== 'delivered' && order.status !== 'cancelled' && (
-                                <button onClick={() => handleStatusChange(order.id, 'cancelled')} className="rounded border border-border bg-white px-2 py-1 text-[10px] font-bold text-rose-600 hover:bg-rose-50">Cancel</button>
-                              )}
-                            </div>
-                          </td>
+                    <tbody className="divide-y divide-border/60 font-medium text-foreground">
+                      {paginatedOrders.length === 0 ? (
+                        <tr>
+                          <td colSpan={10} className="p-12 text-center text-muted-foreground font-bold text-sm">No orders found matching the filter criteria.</td>
                         </tr>
-                      ))}
+                      ) : (
+                        paginatedOrders.map((order) => (
+                          <tr key={order.id} className="hover:bg-[#faf8f5]/70 even:bg-[#fdfcfb]/45 transition-colors">
+                            <td className="p-4 text-center">
+                              <input
+                                type="checkbox"
+                                checked={selectedOrders.includes(order.id)}
+                                onChange={() => handleToggleSelectOrder(order.id)}
+                                className="rounded border-border text-primary focus:ring-primary"
+                              />
+                            </td>
+                            <td className="p-4 font-bold text-primary">{order.id}</td>
+                            <td className="p-4 space-y-1">
+                              <p className="font-bold text-foreground">{order.customer.firstName} {order.customer.lastName}</p>
+                              <p className="text-muted-foreground font-semibold">{order.customer.phone}</p>
+                            </td>
+                            <td className="p-4 space-y-2 max-w-[240px]">
+                              {order.items?.map((item: any, idx: number) => (
+                                <div key={idx} className="border-b border-border/40 pb-1 last:border-0 last:pb-0">
+                                  <p className="font-bold text-foreground leading-tight">{item.quantity} × {item.productName}</p>
+                                  {item.variantDetails && (
+                                    <p className="text-[9px] text-muted-foreground font-semibold leading-none mt-0.5">
+                                      {item.variantDetails.size ? `Size: ${item.variantDetails.size}` : ''}
+                                      {item.variantDetails.flavor ? ` • Flavor: ${item.variantDetails.flavor}` : ''}
+                                    </p>
+                                  )}
+                                </div>
+                              ))}
+                              {order.notes && (
+                                <div className="bg-amber-50/60 border border-accent/20 p-2 rounded-xl text-[9px] font-bold text-amber-900 mt-1.5 whitespace-pre-wrap leading-tight shadow-sm">
+                                  📝 {order.notes}
+                                </div>
+                              )}
+                            </td>
+                            <td className="p-4 space-y-1">
+                              <p className="font-bold">{order.deliveryDate} ({order.deliveryTimeSlot.split(' ')[0]} slot)</p>
+                              <p className="text-muted-foreground font-semibold leading-tight">{order.address.line1}, {order.address.city}</p>
+                            </td>
+                            <td className="p-4 capitalize font-semibold">{order.paymentMethod === 'transfer' ? 'Bank Transfer' : 'COD'}</td>
+                            <td className="p-4">
+                              {order.receiptUrl ? (
+                                <button
+                                  onClick={() => setActiveReceiptUrl(order.receiptUrl || null)}
+                                  className="rounded-full bg-primary/10 px-3 py-1.5 text-[10px] font-bold text-primary hover:bg-primary hover:text-white transition-all flex items-center gap-1 cursor-pointer"
+                                >
+                                  <Eye className="h-3.5 w-3.5" />
+                                  <span>Inspect</span>
+                                </button>
+                              ) : (
+                                <span className="text-muted-foreground/40 text-[10px] font-bold">N/A</span>
+                              )}
+                            </td>
+                            <td className="p-4 font-extrabold text-primary text-sm">LKR {order.total.toLocaleString()}</td>
+                            <td className="p-4">
+                              <span className={`rounded-full px-2.5 py-1 text-[9px] font-extrabold tracking-wider uppercase border ${
+                                order.status === 'pending' ? 'bg-rose-50 text-rose-700 border-rose-200' : ''
+                              } ${
+                                order.status === 'confirmed' ? 'bg-blue-50 text-blue-700 border-blue-200' : ''
+                              } ${
+                                order.status === 'preparing' ? 'bg-amber-50 text-amber-800 border-amber-200' : ''
+                              } ${
+                                order.status === 'out_for_delivery' ? 'bg-purple-50 text-purple-700 border-purple-200' : ''
+                              } ${
+                                order.status === 'delivered' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : ''
+                              } ${
+                                order.status === 'cancelled' ? 'bg-slate-100 text-slate-500 border-slate-200' : ''
+                              }`}>
+                                {order.status}
+                              </span>
+                            </td>
+                            <td className="p-4">
+                              <div className="flex gap-1.5 justify-center">
+                                {order.status === 'pending' && (
+                                  <button onClick={() => handleStatusChange(order.id, 'confirmed')} className="rounded-full bg-primary px-3 py-1.5 text-[10px] font-bold text-white hover:bg-secondary cursor-pointer shadow-sm">Accept</button>
+                                )}
+                                {order.status === 'confirmed' && (
+                                  <button onClick={() => handleStatusChange(order.id, 'preparing')} className="rounded-full bg-amber-600 px-3 py-1.5 text-[10px] font-bold text-white hover:bg-amber-700 cursor-pointer shadow-sm">Bake</button>
+                                )}
+                                {order.status === 'preparing' && (
+                                  <button onClick={() => handleStatusChange(order.id, 'out_for_delivery')} className="rounded-full bg-purple-600 px-3 py-1.5 text-[10px] font-bold text-white hover:bg-purple-700 cursor-pointer shadow-sm">Ship</button>
+                                )}
+                                {order.status === 'out_for_delivery' && (
+                                  <button onClick={() => handleStatusChange(order.id, 'delivered')} className="rounded-full bg-emerald-600 px-3 py-1.5 text-[10px] font-bold text-white hover:bg-emerald-700 cursor-pointer shadow-sm">Complete</button>
+                                )}
+                                {order.status !== 'delivered' && order.status !== 'cancelled' && (
+                                  <button onClick={() => handleStatusChange(order.id, 'cancelled')} className="rounded-full border border-border bg-white px-3 py-1.5 text-[10px] font-bold text-rose-600 hover:bg-rose-50 cursor-pointer">Cancel</button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        ))
+                      )}
                     </tbody>
                   </table>
                 </div>
+
+                {/* Pagination Controls */}
+                {processedOrders.length > ordersPerPage && (
+                  <div className="flex items-center justify-between border-t border-border/50 px-6 py-4 bg-[#fbf9f6]/40 select-none">
+                    <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                      Showing {Math.min((orderPage - 1) * ordersPerPage + 1, processedOrders.length)}–{Math.min(orderPage * ordersPerPage, processedOrders.length)} of {processedOrders.length} entries
+                    </p>
+                    <div className="flex gap-2">
+                      <button
+                        disabled={orderPage === 1}
+                        onClick={() => setOrderPage(p => Math.max(p - 1, 1))}
+                        className="rounded-lg border border-border bg-white px-3 py-1.5 text-xs font-bold text-primary hover:bg-[#faf8f6] disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-all"
+                      >
+                        Previous
+                      </button>
+                      <button
+                        disabled={orderPage * ordersPerPage >= processedOrders.length}
+                        onClick={() => setOrderPage(p => p + 1)}
+                        className="rounded-lg border border-border bg-white px-3 py-1.5 text-xs font-bold text-primary hover:bg-[#faf8f6] disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-all"
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}
 
           {/* TAB 3: CATEGORY MANAGER */}
           {activeTab === 'categories' && (
-            <div className="space-y-6 animate-fadeIn">
-              <div className="flex justify-between items-center">
+            <div className="space-y-6 animate-fadeIn text-xs">
+              <div className="flex justify-between items-center border-b border-border/45 pb-4">
                 <div>
-                  <h3 className="font-display text-base font-extrabold text-primary">Catalog Categories</h3>
+                  <h3 className="font-display text-base font-extrabold text-foreground">Catalog Categories</h3>
                   <p className="text-xs text-muted-foreground font-semibold">Organize items into bakery collections.</p>
                 </div>
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
                 {/* Left side: Categories list table */}
-                <div className="lg:col-span-7 bg-white rounded-3xl border border-border overflow-hidden shadow-sm">
-                  <table className="w-full text-left text-xs border-collapse">
-                    <thead>
-                      <tr className="bg-muted/30 border-b border-border uppercase font-bold text-muted-foreground text-[10px] tracking-wider">
-                        <th className="p-4">Category Visual</th>
-                        <th className="p-4">Category Name</th>
-                        <th className="p-4">SKU Count</th>
-                        <th className="p-4">URL Slug</th>
-                        <th className="p-4 text-center">Settings</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border/60 font-medium">
-                      {categories.map((cat) => (
-                        <tr key={cat.id} className="hover:bg-muted/10 transition-colors">
-                          <td className="p-4">
-                            <img src={cat.image_url} alt={cat.name} className="h-10 w-10 rounded-lg object-cover border border-border" />
-                          </td>
-                          <td className="p-4 space-y-0.5">
-                            <p className="font-bold text-primary">{cat.name}</p>
-                            <p className="text-muted-foreground text-[10px] max-w-[200px] truncate">{cat.description}</p>
-                          </td>
-                          <td className="p-4">
-                            <span className="rounded-full bg-primary/10 px-2 py-0.5 font-bold text-primary text-[10px]">
-                              {products.filter(p => p.categoryName === cat.name).length} SKUs
-                            </span>
-                          </td>
-                          <td className="p-4 font-semibold text-muted-foreground">{cat.slug}</td>
-                          <td className="p-4 text-center">
-                            <div className="flex items-center justify-center gap-1.5">
-                              <button
-                                disabled={!getPermission('catalog')}
-                                onClick={() => openEditCategoryModal(cat)}
-                                className="rounded bg-white border border-border p-1.5 text-primary hover:bg-primary/5 shadow-sm disabled:opacity-50"
-                                title="Edit Category"
-                              >
-                                <Edit2 className="h-3.5 w-3.5" />
-                              </button>
-                              <button
-                                disabled={!getPermission('catalog')}
-                                onClick={() => handleDeleteCategory(cat.id)}
-                                className="rounded bg-white border border-border p-1.5 text-rose-600 hover:bg-rose-50 shadow-sm disabled:opacity-50"
-                                title="Delete Category"
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </button>
-                            </div>
-                          </td>
+                <div className="lg:col-span-7 bg-white rounded-[2rem] border border-border p-6 sm:p-8 shadow-luxury space-y-5">
+                  <div className="flex flex-col sm:flex-row gap-4 items-center justify-between border-b border-border/50 pb-3">
+                    <h4 className="font-display text-sm font-extrabold text-foreground flex items-center gap-2 select-none">
+                      <Database className="h-4 w-4 text-primary" />
+                      <span>Collections Registry</span>
+                    </h4>
+                    
+                    {/* Search box for categories */}
+                    <div className="relative w-full sm:max-w-[200px]">
+                      <input
+                        type="text"
+                        placeholder="Search collections..."
+                        value={categorySearch}
+                        onChange={(e) => setCategorySearch(e.target.value)}
+                        className="w-full rounded-xl border border-border bg-[#faf8f5] pl-8 pr-3 py-1.5 text-xs outline-none focus:border-accent font-semibold text-foreground"
+                      />
+                      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                    </div>
+                  </div>
+
+                  <div className="overflow-x-auto overflow-y-auto max-h-[500px] relative scrollbar-thin">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead>
+                        <tr className="sticky top-0 bg-[#faf8f6] border-b border-border uppercase font-bold text-foreground text-[9px] tracking-wider z-10 shadow-[0_1px_0_rgba(0,0,0,0.05)]">
+                          <th className="p-4 sticky top-0 bg-[#faf8f6] z-10">Category Visual</th>
+                          <th className="p-4 sticky top-0 bg-[#faf8f6] z-10">Category Name</th>
+                          <th className="p-4 sticky top-0 bg-[#faf8f6] z-10">SKU Count</th>
+                          <th className="p-4 sticky top-0 bg-[#faf8f6] z-10">URL Slug</th>
+                          <th className="p-4 text-center sticky top-0 bg-[#faf8f6] z-10">Settings</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody className="divide-y divide-border/60 font-medium text-foreground">
+                        {filteredCategories.length === 0 ? (
+                          <tr>
+                            <td colSpan={5} className="p-12 text-center text-muted-foreground font-bold text-sm">No category collections found matching the query.</td>
+                          </tr>
+                        ) : (
+                          filteredCategories.map((cat) => (
+                            <tr key={cat.id} className="hover:bg-[#faf8f5]/70 even:bg-[#fdfcfb]/45 transition-colors group">
+                              <td className="p-4">
+                                <img src={cat.image_url} alt={cat.name} className="h-11 w-11 rounded-2xl object-cover border border-border shadow-sm group-hover:scale-105 transition-transform duration-300 select-none" />
+                              </td>
+                              <td className="p-4 space-y-1 max-w-xs">
+                                <p className="font-bold text-foreground text-sm">{cat.name}</p>
+                                <p className="text-foreground/75 text-xs font-semibold leading-relaxed break-words whitespace-pre-wrap">{cat.description || 'No description provided.'}</p>
+                              </td>
+                              <td className="p-4">
+                                <span className="rounded-full bg-primary/10 px-3 py-1 font-bold text-primary text-[10px] tracking-wide">
+                                  {products.filter(p => p.categoryName === cat.name).length} SKUs
+                                </span>
+                              </td>
+                              <td className="p-4 font-semibold text-muted-foreground">{cat.slug}</td>
+                              <td className="p-4 text-center">
+                                <div className="flex items-center justify-center gap-1.5">
+                                  <button
+                                    disabled={!getPermission('catalog')}
+                                    onClick={() => openEditCategoryModal(cat)}
+                                    className="rounded-full border border-border bg-[#faf8f6] p-2 text-primary hover:bg-muted transition-all cursor-pointer disabled:opacity-50"
+                                    title="Edit Category"
+                                  >
+                                    <Edit2 className="h-3.5 w-3.5" />
+                                  </button>
+                                  <button
+                                    disabled={!getPermission('catalog')}
+                                    onClick={() => handleDeleteCategory(cat.id)}
+                                    className="rounded-full border border-rose-200 bg-white p-2 text-rose-600 hover:bg-rose-50 transition-all cursor-pointer disabled:opacity-50"
+                                    title="Delete Category"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
 
                 {/* Right side: Quick Inline Category Creator */}
-                <div className="lg:col-span-5 bg-white rounded-3xl border border-border p-6 shadow-sm space-y-4">
-                  <h4 className="font-display text-sm font-extrabold text-primary flex items-center gap-1.5 border-b border-border/50 pb-2">
-                    <Plus className="h-4 w-4" />
+                <div className="lg:col-span-5 bg-white rounded-[2rem] border border-border p-6 sm:p-8 shadow-luxury space-y-6">
+                  <h4 className="font-display text-sm font-extrabold text-foreground flex items-center gap-2 border-b border-border/50 pb-3">
+                    <Plus className="h-4 w-4 text-primary" />
                     <span>Quick Category Creator</span>
                   </h4>
 
-                  <form onSubmit={handleSaveInlineCategory} className="space-y-4 text-xs font-sans">
-                    <div className="space-y-1.5">
-                      <label className="text-[9px] font-extrabold uppercase text-muted-foreground tracking-wider">Category Name *</label>
+                  <form onSubmit={handleSaveInlineCategory} className="space-y-5 text-xs font-sans">
+                    <div className="space-y-2">
+                      <label className="text-xs font-bold uppercase text-muted-foreground tracking-wider">Category Name *</label>
                       <input
                         type="text"
                         required
@@ -1556,12 +1915,12 @@ export default function AdminDashboard() {
                           setInlineCatSlug(e.target.value.toLowerCase().replace(/[^a-z0-9]+/g, '-'));
                         }}
                         placeholder="e.g. French Macarons"
-                        className="w-full rounded-xl border border-border bg-[#faf8f5] p-3 outline-none focus:border-primary/50"
+                        className="w-full rounded-2xl border border-border bg-[#faf8f5] p-3.5 outline-none focus:border-accent font-semibold transition-colors text-foreground"
                       />
                     </div>
 
-                    <div className="space-y-1.5">
-                      <label className="text-[9px] font-extrabold uppercase text-muted-foreground tracking-wider">URL Slug *</label>
+                    <div className="space-y-2">
+                      <label className="text-xs font-bold uppercase text-muted-foreground tracking-wider">URL Slug *</label>
                       <input
                         type="text"
                         required
@@ -1569,13 +1928,13 @@ export default function AdminDashboard() {
                         value={inlineCatSlug}
                         onChange={(e) => setInlineCatSlug(e.target.value)}
                         placeholder="e.g. french-macarons"
-                        className="w-full rounded-xl border border-border bg-[#faf8f5] p-3 outline-none focus:border-primary/50"
+                        className="w-full rounded-2xl border border-border bg-[#faf8f5] p-3.5 outline-none focus:border-accent font-semibold transition-colors text-foreground"
                       />
                     </div>
 
-                    <div className="space-y-1.5">
-                      <label className="text-[9px] font-extrabold uppercase text-muted-foreground tracking-wider">Upload Category Photo *</label>
-                      <div className="relative border border-dashed border-border hover:border-primary/50 rounded-xl p-4 bg-background/10 text-center transition-colors">
+                    <div className="space-y-2">
+                      <label className="text-xs font-bold uppercase text-muted-foreground tracking-wider">Upload Category Photo *</label>
+                      <div className="relative border border-dashed border-border hover:border-accent/60 rounded-2xl p-5 bg-[#faf8f5] text-center transition-all cursor-pointer">
                         <input
                           type="file"
                           accept="image/*"
@@ -1592,10 +1951,10 @@ export default function AdminDashboard() {
                           }}
                           className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                         />
-                        <div className="flex flex-col items-center justify-center gap-1.5 text-xs text-muted-foreground">
-                          <Upload className="h-5 w-5 text-primary" />
+                        <div className="flex flex-col items-center justify-center gap-2 text-xs text-muted-foreground">
+                          <Upload className="h-5 w-5 text-accent" />
                           {inlineCatImage.startsWith('data:') ? (
-                            <span className="text-primary font-bold text-[9px] truncate max-w-[200px]">Photo Attached</span>
+                            <span className="text-primary font-bold text-xs truncate max-w-[200px]">Photo Attached</span>
                           ) : (
                             <span>Select visual banner image</span>
                           )}
@@ -1603,22 +1962,22 @@ export default function AdminDashboard() {
                       </div>
                     </div>
 
-                    <div className="space-y-1.5">
-                      <label className="text-[9px] font-extrabold uppercase text-muted-foreground tracking-wider">Description</label>
+                    <div className="space-y-2">
+                      <label className="text-xs font-bold uppercase text-muted-foreground tracking-wider">Description</label>
                       <textarea
                         disabled={!getPermission('catalog')}
                         value={inlineCatDesc}
                         onChange={(e) => setInlineCatDesc(e.target.value)}
                         placeholder="Describe the sweet items inside this collection..."
                         rows={3}
-                        className="w-full rounded-xl border border-border bg-[#faf8f5] p-3 outline-none focus:border-primary/50 resize-none"
+                        className="w-full rounded-2xl border border-border bg-[#faf8f5] p-3.5 outline-none focus:border-accent font-semibold transition-colors text-foreground resize-none"
                       />
                     </div>
 
                     <button
                       type="submit"
                       disabled={!getPermission('catalog')}
-                      className="w-full rounded-full bg-primary py-3.5 font-bold uppercase tracking-widest text-white hover:bg-secondary shadow disabled:opacity-50 mt-2"
+                      className="w-full rounded-full bg-primary hover:bg-[#a34d2b] py-4 font-bold uppercase tracking-widest text-white shadow-md disabled:opacity-50 mt-4 cursor-pointer transition-all active:scale-[0.98]"
                     >
                       Save Category
                     </button>
@@ -1630,16 +1989,16 @@ export default function AdminDashboard() {
 
           {/* TAB 4: CATALOG & PRODUCTS */}
           {activeTab === 'catalog' && (
-            <div className="space-y-6 animate-fadeIn">
-              <div className="flex justify-between items-center">
+            <div className="space-y-6 animate-fadeIn text-xs">
+              <div className="flex justify-between items-center border-b border-border/45 pb-4">
                 <div>
-                  <h3 className="font-display text-base font-extrabold text-primary">Bakery Catalog Items</h3>
+                  <h3 className="font-display text-base font-extrabold text-foreground">Bakery Catalog Items</h3>
                   <p className="text-xs text-muted-foreground font-semibold">Manage pricing, variants, and availability of products.</p>
                 </div>
                 <button
                   disabled={!getPermission('catalog')}
                   onClick={openAddProductModal}
-                  className="rounded-full bg-primary px-4 py-2 text-xs font-bold text-white hover:bg-secondary transition-all disabled:opacity-50 flex items-center gap-1.5 shadow"
+                  className="rounded-full bg-primary hover:bg-[#a34d2b] px-5 py-2.5 text-xs font-bold text-white transition-all disabled:opacity-50 flex items-center gap-1.5 shadow-md cursor-pointer"
                 >
                   <Plus className="h-4 w-4" />
                   <span>Add Product SKU</span>
@@ -1648,83 +2007,180 @@ export default function AdminDashboard() {
 
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
                 {/* Left side: Bakery Catalog list */}
-                <div className="lg:col-span-8 bg-white rounded-3xl border border-border overflow-hidden shadow-sm">
-                  <table className="w-full text-left text-xs border-collapse">
-                    <thead>
-                      <tr className="bg-muted/30 border-b border-border uppercase font-bold text-muted-foreground text-[10px] tracking-wider">
-                        <th className="p-4">Product Details</th>
-                        <th className="p-4">Category</th>
-                        <th className="p-4">Base Price</th>
-                        <th className="p-4">Availability</th>
-                        <th className="p-4 text-center">Settings</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border/60 font-medium">
-                      {products.map((prod) => (
-                        <tr key={prod.id} className="hover:bg-muted/10 transition-colors">
-                          <td className="p-4 flex items-center gap-3">
-                            <img src={prod.imageUrl} alt={prod.name} className="h-10 w-10 rounded-lg object-cover border border-border" />
-                            <div className="space-y-0.5">
-                              <p className="font-bold text-foreground-custom">{prod.name}</p>
-                              <p className="text-muted-foreground text-[9px] font-semibold">Bake window: {prod.leadTimeHours}h • Cap: {prod.dailyOrderCap || 'None'}/day</p>
-                            </div>
-                          </td>
-                          <td className="p-4 text-muted-foreground font-semibold">{prod.categoryName}</td>
-                          <td className="p-4 font-bold text-primary">LKR {prod.basePrice.toLocaleString()}</td>
-                          <td className="p-4">
-                            <button
-                              disabled={!getPermission('catalog')}
-                              onClick={() => handleToggleAvailability(prod.id)}
-                              className={`rounded-full px-2.5 py-1 text-[10px] font-bold border transition-colors ${
-                                prod.isAvailable ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-rose-50 border-rose-200 text-rose-700'
-                              } disabled:opacity-50`}
-                            >
-                              {prod.isAvailable ? 'Available' : 'Unavailable'}
-                            </button>
-                          </td>
-                          <td className="p-4 text-center">
-                            <div className="flex items-center justify-center gap-1.5">
-                              <button
-                                disabled={!getPermission('catalog')}
-                                onClick={() => openEditProductModal(prod)}
-                                className="rounded bg-white border border-border p-1.5 text-primary hover:bg-primary/5 shadow-sm disabled:opacity-50"
-                                title="Edit Product Item"
-                              >
-                                <Edit2 className="h-3.5 w-3.5" />
-                              </button>
-                              <button
-                                disabled={!getPermission('catalog')}
-                                onClick={() => handleDeleteProduct(prod.id)}
-                                className="rounded bg-white border border-border p-1.5 text-rose-600 hover:bg-rose-50 shadow-sm disabled:opacity-50"
-                                title="Delete Product Item"
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </button>
-                            </div>
-                          </td>
+                <div className="lg:col-span-8 bg-white rounded-[2rem] border border-border p-6 sm:p-8 shadow-luxury space-y-5">
+                  
+                  {/* Catalog Filters Bar */}
+                  <div className="bg-[#faf8f5] border border-border p-4 rounded-2xl space-y-3.5">
+                    <div className="flex flex-col sm:flex-row gap-3">
+                      <div className="relative flex-1">
+                        <input
+                          type="text"
+                          placeholder="Search product name..."
+                          value={productSearch}
+                          onChange={(e) => { setProductSearch(e.target.value); setProductPage(1); }}
+                          className="w-full rounded-xl border border-border bg-white pl-8 pr-3 py-1.5 text-xs outline-none focus:border-accent font-semibold text-foreground"
+                        />
+                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                      </div>
+                      
+                      <select
+                        value={productFilterCategory}
+                        onChange={(e) => { setProductFilterCategory(e.target.value); setProductPage(1); }}
+                        className="rounded-xl border border-border bg-white px-3 py-1.5 text-xs font-semibold outline-none focus:border-accent text-foreground"
+                      >
+                        <option value="all">All Categories</option>
+                        {categories.map(c => (
+                          <option key={c.id} value={c.name}>{c.name}</option>
+                        ))}
+                      </select>
+
+                      <select
+                        value={productFilterStatus}
+                        onChange={(e) => { setProductFilterStatus(e.target.value as any); setProductPage(1); }}
+                        className="rounded-xl border border-border bg-white px-3 py-1.5 text-xs font-semibold outline-none focus:border-accent text-foreground"
+                      >
+                        <option value="all">All Statuses</option>
+                        <option value="available">Available</option>
+                        <option value="unavailable">Unavailable</option>
+                      </select>
+                    </div>
+
+                    <div className="flex items-center justify-between border-t border-border/40 pt-3 text-xs">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider">Sort By</span>
+                        <select
+                          value={productSortBy}
+                          onChange={(e) => { setProductSortBy(e.target.value as any); setProductPage(1); }}
+                          className="rounded-xl border border-border bg-white px-2.5 py-1 text-xs font-semibold outline-none focus:border-accent text-foreground"
+                        >
+                          <option value="name">Product Name</option>
+                          <option value="price">Base Price</option>
+                          <option value="leadTime">Bake Lead Time</option>
+                        </select>
+                        <button
+                          onClick={() => { setProductSortOrder(prev => prev === 'asc' ? 'desc' : 'asc'); setProductPage(1); }}
+                          className="p-1.5 rounded-lg border border-border bg-white hover:bg-muted/40 text-primary transition-all cursor-pointer"
+                          title={productSortOrder === 'asc' ? 'Sort Ascending' : 'Sort Descending'}
+                        >
+                          {productSortOrder === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />}
+                        </button>
+                      </div>
+                      
+                      <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                        Found {processedProducts.length} items
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="overflow-x-auto overflow-y-auto max-h-[500px] relative scrollbar-thin">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead>
+                        <tr className="sticky top-0 bg-[#faf8f6] border-b border-border uppercase font-bold text-foreground text-[9px] tracking-wider z-10 shadow-[0_1px_0_rgba(0,0,0,0.05)]">
+                          <th className="p-4 sticky top-0 bg-[#faf8f6] z-10">Product Details</th>
+                          <th className="p-4 sticky top-0 bg-[#faf8f6] z-10">Category</th>
+                          <th className="p-4 sticky top-0 bg-[#faf8f6] z-10">Base Price</th>
+                          <th className="p-4 sticky top-0 bg-[#faf8f6] z-10">Availability</th>
+                          <th className="p-4 text-center sticky top-0 bg-[#faf8f6] z-10">Settings</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody className="divide-y divide-border/60 font-medium text-foreground">
+                        {paginatedProducts.length === 0 ? (
+                          <tr>
+                            <td colSpan={5} className="p-12 text-center text-muted-foreground font-bold text-sm">No products found matching the filters.</td>
+                          </tr>
+                        ) : (
+                          paginatedProducts.map((prod) => (
+                            <tr key={prod.id} className="hover:bg-[#faf8f5]/70 even:bg-[#fdfcfb]/45 transition-colors group">
+                              <td className="p-4 flex items-center gap-3">
+                                <img src={prod.imageUrl} alt={prod.name} className="h-11 w-11 rounded-2xl object-cover border border-border shadow-sm group-hover:scale-105 transition-transform duration-300 select-none" />
+                                <div className="space-y-1">
+                                  <p className="font-bold text-foreground text-sm leading-tight">{prod.name}</p>
+                                  <p className="text-muted-foreground text-[9px] font-bold uppercase tracking-wider leading-none">Bake window: {prod.leadTimeHours}h • Cap: {prod.dailyOrderCap || 'None'}/day</p>
+                                </div>
+                              </td>
+                              <td className="p-4 text-muted-foreground font-semibold">{prod.categoryName}</td>
+                              <td className="p-4 font-extrabold text-primary text-sm">LKR {prod.basePrice.toLocaleString()}</td>
+                              <td className="p-4">
+                                <button
+                                  disabled={!getPermission('catalog')}
+                                  onClick={() => handleToggleAvailability(prod.id)}
+                                  className={`rounded-full px-3 py-1.5 text-[10px] font-extrabold border transition-colors cursor-pointer ${
+                                    prod.isAvailable ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-rose-50 border-rose-200 text-rose-700'
+                                  } disabled:opacity-50`}
+                                >
+                                  {prod.isAvailable ? 'Available' : 'Unavailable'}
+                                </button>
+                              </td>
+                              <td className="p-4 text-center">
+                                <div className="flex items-center justify-center gap-1.5">
+                                  <button
+                                    disabled={!getPermission('catalog')}
+                                    onClick={() => openEditProductModal(prod)}
+                                    className="rounded-full border border-border bg-[#faf8f6] p-2 text-primary hover:bg-muted transition-all cursor-pointer disabled:opacity-50"
+                                    title="Edit Product Item"
+                                  >
+                                    <Edit2 className="h-3.5 w-3.5" />
+                                  </button>
+                                  <button
+                                    disabled={!getPermission('catalog')}
+                                    onClick={() => handleDeleteProduct(prod.id)}
+                                    className="rounded-full border border-rose-200 bg-white p-2 text-rose-600 hover:bg-rose-50 transition-all cursor-pointer disabled:opacity-50"
+                                    title="Delete Product Item"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Pagination Controls */}
+                  {processedProducts.length > productsPerPage && (
+                    <div className="flex items-center justify-between border-t border-border/50 px-6 py-4 bg-[#fbf9f6]/40 select-none">
+                      <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                        Showing {Math.min((productPage - 1) * productsPerPage + 1, processedProducts.length)}–{Math.min(productPage * productsPerPage, processedProducts.length)} of {processedProducts.length} entries
+                      </p>
+                      <div className="flex gap-2">
+                        <button
+                          disabled={productPage === 1}
+                          onClick={() => setProductPage(p => Math.max(p - 1, 1))}
+                          className="rounded-lg border border-border bg-white px-3 py-1.5 text-xs font-bold text-primary hover:bg-[#faf8f6] disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-all"
+                        >
+                          Previous
+                        </button>
+                        <button
+                          disabled={productPage * productsPerPage >= processedProducts.length}
+                          onClick={() => setProductPage(p => p + 1)}
+                          className="rounded-lg border border-border bg-white px-3 py-1.5 text-xs font-bold text-primary hover:bg-[#faf8f6] disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-all"
+                        >
+                          Next
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Right side: Catalog Stats & Kitchen Policy */}
                 <div className="lg:col-span-4 space-y-6">
                   {/* Catalog Stats Card */}
-                  <div className="bg-white rounded-3xl border border-border p-6 shadow-sm space-y-4">
-                    <h4 className="font-display text-sm font-extrabold text-primary border-b border-border/50 pb-2">Catalog Analytics</h4>
+                  <div className="bg-white rounded-[2rem] border border-border p-6 shadow-luxury space-y-5">
+                    <h4 className="font-display text-sm font-extrabold text-foreground border-b border-border/50 pb-3">Catalog Analytics</h4>
                     <div className="grid grid-cols-2 gap-4 text-xs font-semibold">
-                      <div className="bg-[#faf8f5] p-3 rounded-xl border border-border/50 text-center">
-                        <p className="text-muted-foreground text-[9px] uppercase">Total SKUs</p>
-                        <p className="text-lg font-bold text-primary mt-1">{products.length}</p>
+                      <div className="bg-[#faf8f5] p-4 rounded-2xl border border-border/50 text-center">
+                        <p className="text-muted-foreground text-[10px] font-bold uppercase tracking-wider">Total SKUs</p>
+                        <p className="text-2xl font-black text-primary mt-1.5">{products.length}</p>
                       </div>
-                      <div className="bg-[#faf8f5] p-3 rounded-xl border border-border/50 text-center">
-                        <p className="text-muted-foreground text-[9px] uppercase">Active</p>
-                        <p className="text-lg font-bold text-emerald-700 mt-1">{products.filter(p => p.isAvailable).length}</p>
+                      <div className="bg-[#faf8f5] p-4 rounded-2xl border border-border/50 text-center">
+                        <p className="text-muted-foreground text-[10px] font-bold uppercase tracking-wider">Active</p>
+                        <p className="text-2xl font-black text-emerald-700 mt-1.5">{products.filter(p => p.isAvailable).length}</p>
                       </div>
-                      <div className="bg-[#faf8f5] p-3 rounded-xl border border-border/50 text-center col-span-2">
-                        <p className="text-muted-foreground text-[9px] uppercase">Average Baking Lead Time</p>
-                        <p className="text-base font-bold text-primary mt-1">
+                      <div className="bg-[#faf8f5] p-4 rounded-2xl border border-border/50 text-center col-span-2">
+                        <p className="text-muted-foreground text-[10px] font-bold uppercase tracking-wider">Average Baking Lead Time</p>
+                        <p className="text-lg font-black text-[#8c3a1b] mt-1.5">
                           {Math.round(products.reduce((acc, curr) => acc + curr.leadTimeHours, 0) / (products.length || 1))} hours
                         </p>
                       </div>
@@ -1732,16 +2188,16 @@ export default function AdminDashboard() {
                   </div>
 
                   {/* Kitchen capacity rules card */}
-                  <div className="bg-white rounded-3xl border border-[#c5a880]/30 p-6 shadow-sm space-y-3">
-                    <h4 className="font-display text-sm font-extrabold text-primary">Kitchen Operation Rules</h4>
-                    <div className="text-xs space-y-2.5 text-muted-foreground font-semibold">
-                      <div className="flex gap-2">
-                        <span className="text-primary">✦</span>
-                        <p><strong>Bake Lead Time:</strong> Rules gate checkout calendar entries, preventing customers from scheduling orders inside the prep time required.</p>
+                  <div className="bg-white rounded-[2rem] border border-accent/20 p-6 shadow-luxury space-y-4">
+                    <h4 className="font-display text-sm font-extrabold text-foreground border-b border-border/50 pb-2">Kitchen Operation Rules</h4>
+                    <div className="text-xs space-y-3.5 text-muted-foreground font-semibold leading-relaxed">
+                      <div className="flex gap-2.5">
+                        <span className="text-accent font-bold">✦</span>
+                        <p className="text-foreground/75"><strong className="text-[#8c3a1b]">Bake Lead Time:</strong> Rules gate checkout calendar entries, preventing customers from scheduling orders inside the prep time required.</p>
                       </div>
-                      <div className="flex gap-2">
-                        <span className="text-primary">✦</span>
-                        <p><strong>Daily Order Cap:</strong> Restricts active baking orders slots per day. Safeguards resources during intense weekend schedules.</p>
+                      <div className="flex gap-2.5">
+                        <span className="text-accent font-bold">✦</span>
+                        <p className="text-foreground/75"><strong className="text-[#8c3a1b]">Daily Order Cap:</strong> Restricts active baking orders slots per day. Safeguards resources during intense weekend schedules.</p>
                       </div>
                     </div>
                   </div>
@@ -1753,180 +2209,247 @@ export default function AdminDashboard() {
 
           {/* TAB 5: CUSTOMER REGISTRY */}
           {activeTab === 'customers' && (
-            <div className="space-y-6 animate-fadeIn">
+            <div className="space-y-6 animate-fadeIn text-xs">
               {/* Stats bar */}
-              <div className="grid grid-cols-3 gap-4 max-w-xl">
-                <div className="bg-white rounded-2xl border border-border p-4 shadow-sm text-center">
-                  <p className="text-xl font-black text-primary">{customers.length}</p>
-                  <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mt-0.5">Total</p>
+              <div className="grid grid-cols-3 gap-6 max-w-xl pb-2">
+                <div className="bg-white rounded-[1.5rem] border border-border p-5 shadow-luxury text-center hover:border-accent/40 transition-all">
+                  <p className="text-2xl font-black text-foreground">{customers.length}</p>
+                  <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mt-1">Total</p>
                 </div>
-                <div className="bg-white rounded-2xl border border-border p-4 shadow-sm text-center">
-                  <p className="text-xl font-black text-emerald-600">{customers.filter(c => c.emailVerified !== false).length}</p>
-                  <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mt-0.5">Verified</p>
-                </div>
-                <div className="bg-white rounded-2xl border border-border p-4 shadow-sm text-center">
-                  <p className="text-xl font-black text-amber-600">{customers.filter(c => c.emailVerified === false).length}</p>
-                  <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mt-0.5">Unverified</p>
+                <div className="bg-white rounded-[1.5rem] border border-border p-5 shadow-luxury text-center hover:border-emerald-200 transition-all">
+                  <p className="text-2xl font-black text-amber-600">{customers.filter(c => c.emailVerified === false).length}</p>
+                  <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mt-1">Unverified</p>
                 </div>
               </div>
 
-              {/* Search */}
-              <div className="max-w-sm">
-                <input
-                  type="text"
-                  placeholder="Search by name, email or phone…"
-                  value={customerSearch}
-                  onChange={e => setCustomerSearch(e.target.value)}
-                  className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-xs outline-none focus:border-primary/50 transition-colors"
-                />
+              {/* Search & Sort Panel */}
+              <div className="flex flex-col sm:flex-row gap-4 items-center justify-between bg-white border border-border p-4 rounded-[1.5rem] shadow-luxury">
+                <div className="relative w-full sm:max-w-xs">
+                  <input
+                    type="text"
+                    placeholder="Search by name, email or phone…"
+                    value={customerSearch}
+                    onChange={e => { setCustomerSearch(e.target.value); setCustomerPage(1); }}
+                    className="w-full rounded-xl border border-border bg-[#faf8f5] pl-9 pr-4 py-2.5 text-xs outline-none focus:border-accent font-semibold text-foreground"
+                  />
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                </div>
+                <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
+                  <span className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider select-none">Sort By</span>
+                  <select
+                    value={customerSortBy}
+                    onChange={(e) => { setCustomerSortBy(e.target.value as any); setCustomerPage(1); }}
+                    className="rounded-xl border border-border bg-white px-3 py-2 text-xs font-semibold outline-none focus:border-accent text-foreground"
+                  >
+                    <option value="name">Customer Name</option>
+                    <option value="registered">Registration Date</option>
+                  </select>
+                </div>
               </div>
 
-              <div className="bg-white rounded-3xl border border-border overflow-hidden shadow-sm">
-                <div className="overflow-x-auto">
+              {/* Customer Table */}
+              <div className="bg-white rounded-[2rem] border border-border overflow-hidden shadow-luxury">
+                <div className="overflow-x-auto overflow-y-auto max-h-[500px] relative scrollbar-thin">
                   <table className="w-full text-left text-xs border-collapse">
                     <thead>
-                      <tr className="bg-muted/30 border-b border-border uppercase font-bold text-muted-foreground text-[10px] tracking-wider">
-                        <th className="p-4">Full Name</th>
-                        <th className="p-4">Email Address</th>
-                        <th className="p-4">Phone</th>
-                        <th className="p-4">Verified</th>
-                        <th className="p-4">Registered</th>
+                      <tr className="sticky top-0 bg-[#faf8f6] border-b border-border uppercase font-bold text-foreground text-[9px] tracking-wider z-10 shadow-[0_1px_0_rgba(0,0,0,0.05)]">
+                        <th className="p-4 sticky top-0 bg-[#faf8f6] z-10">Full Name</th>
+                        <th className="p-4 sticky top-0 bg-[#faf8f6] z-10">Email Address</th>
+                        <th className="p-4 sticky top-0 bg-[#faf8f6] z-10">Phone</th>
+                        <th className="p-4 sticky top-0 bg-[#faf8f6] z-10">Verified Status</th>
+                        <th className="p-4 sticky top-0 bg-[#faf8f6] z-10">Registered On</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-border/60 font-medium">
-                      {customers
-                        .filter(cust => {
-                          if (!customerSearch) return true;
-                          const q = customerSearch.toLowerCase();
-                          return (
-                            (`${cust.firstName} ${cust.lastName}`).toLowerCase().includes(q) ||
-                            cust.email.toLowerCase().includes(q) ||
-                            (cust.phone || '').toLowerCase().includes(q)
-                          );
-                        })
-                        .map((cust) => (
-                          <tr key={cust.id} className="hover:bg-muted/10 transition-colors">
-                            <td className="p-4 font-extrabold">
-                              <div className="flex items-center gap-2">
-                                <div className="h-7 w-7 rounded-full bg-primary/10 text-primary flex items-center justify-center text-[10px] font-black shrink-0">
+                    <tbody className="divide-y divide-border/60 font-medium text-foreground">
+                      {paginatedCustomers.length === 0 ? (
+                        <tr>
+                          <td colSpan={5} className="p-12 text-center text-muted-foreground font-bold text-sm">No customers found in registry.</td>
+                        </tr>
+                      ) : (
+                        paginatedCustomers.map((cust) => (
+                          <tr key={cust.id} className="hover:bg-[#faf8f5]/70 even:bg-[#fdfcfb]/45 transition-colors">
+                            <td className="p-4">
+                              <div className="flex items-center gap-3">
+                                <div className="h-8 w-8 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-black shrink-0 border border-primary/5 shadow-sm select-none">
                                   {(cust.firstName?.[0] || '?').toUpperCase()}
                                 </div>
-                                {cust.firstName} {cust.lastName}
+                                <span className="font-bold text-foreground text-sm">{cust.firstName} {cust.lastName}</span>
                               </div>
                             </td>
                             <td className="p-4 text-muted-foreground font-semibold">{cust.email}</td>
-                            <td className="p-4 font-bold">{cust.phone || '—'}</td>
+                            <td className="p-4 font-bold text-foreground/80">{cust.phone || '—'}</td>
                             <td className="p-4">
                               {cust.emailVerified === false ? (
-                                <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 border border-amber-200 px-2 py-0.5 text-[10px] font-bold text-amber-700">
+                                <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 border border-amber-200 px-3 py-1 text-[10px] font-extrabold text-amber-700 uppercase tracking-wider">
                                   ⏳ Pending
                                 </span>
                               ) : (
-                                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[10px] font-bold text-emerald-700">
+                                <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 border border-emerald-200 px-3 py-1 text-[10px] font-extrabold text-emerald-700 uppercase tracking-wider">
                                   ✅ Verified
                                 </span>
                               )}
                             </td>
-                            <td className="p-4 text-muted-foreground font-medium">
+                            <td className="p-4 text-muted-foreground font-semibold">
                               {cust.createdAt ? new Date(cust.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
                             </td>
                           </tr>
-                        ))}
-                      {customers.length === 0 && (
-                        <tr>
-                          <td colSpan={5} className="p-8 text-center text-muted-foreground font-semibold">No customers found.</td>
-                        </tr>
+                        ))
                       )}
                     </tbody>
                   </table>
                 </div>
+
+                {/* Pagination Controls */}
+                {processedCustomers.length > customersPerPage && (
+                  <div className="flex items-center justify-between border-t border-border/50 px-6 py-4 bg-[#fbf9f6]/40 select-none">
+                    <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                      Showing {Math.min((customerPage - 1) * customersPerPage + 1, processedCustomers.length)}–{Math.min(customerPage * customersPerPage, processedCustomers.length)} of {processedCustomers.length} entries
+                    </p>
+                    <div className="flex gap-2">
+                      <button
+                        disabled={customerPage === 1}
+                        onClick={() => setCustomerPage(p => Math.max(p - 1, 1))}
+                        className="rounded-lg border border-border bg-white px-3 py-1.5 text-xs font-bold text-primary hover:bg-[#faf8f6] disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-all"
+                      >
+                        Previous
+                      </button>
+                      <button
+                        disabled={customerPage * customersPerPage >= processedCustomers.length}
+                        onClick={() => setCustomerPage(p => p + 1)}
+                        className="rounded-lg border border-border bg-white px-3 py-1.5 text-xs font-bold text-primary hover:bg-[#faf8f6] disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-all"
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}
 
-
-
           {/* TAB 6: USER MANAGEMENT & ROLE CREATION */}
           {activeTab === 'users' && getPermission('users') && (
-            <div className="space-y-8 animate-fadeIn w-full">
-              
-              {/* Add User and Roles Header Actions */}
+            <div className="space-y-6 animate-fadeIn w-full text-xs">
+
+              {/* Page Header */}
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
-                  <h3 className="font-display text-base font-extrabold text-primary">Admin Registry & System Roles</h3>
+                  <h3 className="font-display text-base font-extrabold text-foreground">Admin Registry & System Roles</h3>
                   <p className="text-xs text-muted-foreground mt-0.5 font-semibold">Manage system users, passwords, and permissions configuration.</p>
                 </div>
                 <button
                   onClick={() => setIsAddUserModalOpen(true)}
-                  className="rounded-full bg-primary px-5 py-2.5 text-xs font-bold text-white hover:bg-secondary transition-all flex items-center gap-1.5"
+                  className="rounded-xl bg-primary hover:bg-[#a34d2b] px-6 py-3 text-xs font-bold text-white transition-all flex items-center gap-2 shadow-md cursor-pointer active:scale-[0.98]"
                 >
                   <Plus className="h-4 w-4" />
                   <span>Create Admin User</span>
                 </button>
               </div>
 
-              {/* Left Column: Admin Users. Right Column: Custom Roles & Permissions */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start w-full">
-                
-                {/* Users Registry List Table */}
-                <div className="bg-white rounded-3xl border border-border p-6 shadow-sm space-y-4 w-full min-w-0">
-                  <h4 className="font-display text-sm font-extrabold text-primary flex items-center gap-1.5">
-                    <Users className="h-4 w-4 text-primary" />
-                    <span>System Operators</span>
-                  </h4>
+              {/* Sub-Tab Navigation Pills */}
+              <div className="flex gap-1 bg-[#f5f0ea] p-1.5 rounded-2xl border border-border w-fit">
+                {([
+                  { key: 'operators', label: '👤 Operators Registry' },
+                  { key: 'roles',     label: '🔐 Roles & Permissions' },
+                ] as { key: 'operators' | 'roles'; label: string }[]).map(({ key, label }) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setUserSubTab(key)}
+                    className={`px-5 py-2 text-[11px] font-extrabold uppercase tracking-wide rounded-xl transition-all cursor-pointer ${
+                      userSubTab === key
+                        ? 'bg-white text-primary shadow-sm border border-border'
+                        : 'text-muted-foreground hover:text-foreground hover:bg-white/50'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
 
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left text-xs border-collapse">
+              {/* ── SUB-TAB: OPERATORS REGISTRY ── */}
+              {userSubTab === 'operators' && (
+                <div className="bg-white border border-border shadow-luxury overflow-hidden rounded-2xl">
+                  {/* Card Header */}
+                  <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-[#faf8f6]">
+                    <div className="flex items-center gap-2">
+                      <Users className="h-4 w-4 text-primary" />
+                      <h4 className="font-display text-sm font-extrabold text-foreground">System Operators</h4>
+                      <span className="ml-1 rounded-full bg-primary/10 px-2 py-0.5 text-[9px] font-extrabold text-primary uppercase">{adminUsers.length} users</span>
+                    </div>
+                  </div>
+
+                  {/* Operators Table */}
+                  <div className="overflow-x-auto overflow-y-auto max-h-[520px] scrollbar-thin">
+                    <table className="w-full text-left text-xs border-collapse min-w-[680px] rounded-2xl overflow-hidden">
                       <thead>
-                        <tr className="bg-muted/30 border-b border-border uppercase font-bold text-muted-foreground text-[9px] tracking-wider">
-                          <th className="p-3">User Details</th>
-                          <th className="p-3">System Role</th>
-                          <th className="p-3">Login Password</th>
-                          <th className="p-3">Status</th>
-                          <th className="p-3 text-center">Toggle</th>
+                        <tr className="sticky top-0 bg-[#f5f0ea] z-10 border-b border-border">
+                          <th className="px-6 py-3.5 text-[9px] font-extrabold uppercase tracking-widest text-muted-foreground">Admin User</th>
+                          <th className="px-6 py-3.5 text-[9px] font-extrabold uppercase tracking-widest text-muted-foreground">Assigned Role</th>
+                          <th className="px-6 py-3.5 text-[9px] font-extrabold uppercase tracking-widest text-muted-foreground">Login Password</th>
+                          <th className="px-6 py-3.5 text-[9px] font-extrabold uppercase tracking-widest text-muted-foreground">Account Status</th>
+                          <th className="px-6 py-3.5 text-[9px] font-extrabold uppercase tracking-widest text-muted-foreground text-center">Action</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-border/60 font-medium">
+                      <tbody className="divide-y divide-border/50 font-medium text-foreground">
                         {adminUsers.map((user) => {
                           const canEditThisUser =
                             currentAdmin?.role === 'Super Admin' ||
                             (currentAdmin?.role === 'Admin' && user.role !== 'Super Admin');
-
                           return (
-                            <tr key={user.id} className="hover:bg-muted/10">
-                              <td className="p-3">
-                                <p className="font-bold">{user.name}</p>
-                                <p className="text-muted-foreground text-[10px]">{user.email}</p>
+                            <tr key={user.id} className="hover:bg-[#faf8f5] even:bg-[#fdfcfb]/60 transition-colors group">
+                              <td className="px-6 py-4">
+                                <div className="flex items-center gap-3">
+                                  <div className="h-8 w-8 rounded-full bg-gradient-to-br from-[#c5a880] to-[#8c3a1b] flex items-center justify-center text-white text-[11px] font-extrabold flex-shrink-0">
+                                    {user.name?.charAt(0).toUpperCase()}
+                                  </div>
+                                  <div>
+                                    <p className="font-bold text-foreground text-[12px]">{user.name}</p>
+                                    <p className="text-muted-foreground font-semibold text-[10px]">{user.email}</p>
+                                  </div>
+                                </div>
                               </td>
-                              <td className="p-3">
+                              <td className="px-6 py-4">
                                 <select
                                   disabled={!canEditThisUser || user.email === currentAdmin?.email}
                                   value={user.role}
                                   onChange={(e) => handleUpdateUserRole(user.id, e.target.value)}
-                                  className="rounded-lg border border-border bg-white p-1.5 text-xs font-semibold outline-none focus:border-primary/50 disabled:bg-muted/10 disabled:cursor-not-allowed"
+                                  className="rounded-lg border border-border bg-[#faf8f6] px-3 py-2 text-xs font-semibold outline-none focus:border-accent transition-colors disabled:bg-muted/10 disabled:cursor-not-allowed text-foreground"
                                 >
                                   {customRoles.map(r => (
                                     <option key={r.name} value={r.name}>{r.name}</option>
                                   ))}
                                 </select>
                               </td>
-                              <td className="p-3 font-mono text-muted-foreground">{user.email.includes('super') ? 'super123' : user.email.includes('admin') ? 'admin123' : user.email.includes('staff') ? 'staff123' : 'pesha123'}</td>
-                              <td className="p-3">
-                                <span className={`rounded-full px-2 py-0.5 text-[9px] font-bold uppercase ${
-                                  user.status === 'active' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-rose-50 text-rose-700 border border-rose-200'
+                              <td className="px-6 py-4">
+                                <span className="font-mono text-muted-foreground font-semibold text-[11px] bg-[#f5f0ea] px-2.5 py-1 rounded">
+                                  {user.email.includes('super') ? 'super123' : user.email.includes('admin') ? 'admin123' : user.email.includes('staff') ? 'staff123' : 'pesha123'}
+                                </span>
+                              </td>
+                              <td className="px-6 py-4">
+                                <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[9px] font-extrabold uppercase border ${
+                                  user.status === 'active'
+                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                    : 'bg-rose-50 text-rose-700 border-rose-200'
                                 }`}>
+                                  <span className={`h-1.5 w-1.5 rounded-full ${user.status === 'active' ? 'bg-emerald-500' : 'bg-rose-500'}`} />
                                   {user.status}
                                 </span>
                               </td>
-                              <td className="p-3 text-center">
-                                {user.email !== currentAdmin?.email && canEditThisUser && (
+                              <td className="px-6 py-4 text-center">
+                                {user.email !== currentAdmin?.email && canEditThisUser ? (
                                   <button
                                     onClick={() => handleToggleUserStatus(user.id)}
-                                    className="rounded bg-white border border-border p-1 text-rose-600 hover:bg-rose-50 shadow-sm text-[10px] font-bold"
-                                    title={user.status === 'active' ? 'Suspend User' : 'Activate User'}
+                                    className={`rounded-full px-4 py-1.5 text-[10px] font-extrabold uppercase transition-all cursor-pointer border ${
+                                      user.status === 'active'
+                                        ? 'border-rose-200 bg-rose-50 text-rose-600 hover:bg-rose-100'
+                                        : 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                                    }`}
                                   >
                                     {user.status === 'active' ? 'Suspend' : 'Activate'}
                                   </button>
+                                ) : (
+                                  <span className="text-[10px] text-muted-foreground/40 font-semibold italic">—</span>
                                 )}
                               </td>
                             </tr>
@@ -1936,78 +2459,62 @@ export default function AdminDashboard() {
                     </table>
                   </div>
                 </div>
+              )}
 
-                {/* Role Creation panel */}
-                <div className="space-y-6 w-full min-w-0">
-                  {/* System Roles Table */}
-                  <div className="bg-white rounded-3xl border border-border p-6 shadow-sm space-y-4">
-                    <h4 className="font-display text-sm font-extrabold text-primary flex items-center gap-1.5">
+              {/* ── SUB-TAB: ROLES & PERMISSIONS ── */}
+              {userSubTab === 'roles' && (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+
+                  {/* Existing Roles Permission Matrix */}
+                  <div className="bg-white border border-border shadow-luxury overflow-hidden rounded-2xl">
+                    <div className="px-6 py-4 border-b border-border bg-[#faf8f6] flex items-center gap-2">
                       <Layers className="h-4 w-4 text-primary" />
-                      <span>Role Permissions Config</span>
-                    </h4>
-                    <div className="space-y-3">
+                      <h4 className="font-display text-sm font-extrabold text-foreground">Configured Roles</h4>
+                      <span className="ml-1 rounded-full bg-primary/10 px-2 py-0.5 text-[9px] font-extrabold text-primary uppercase">{customRoles.length} roles</span>
+                    </div>
+                    <div className="p-6 space-y-4">
                       {customRoles.map((role, idx) => {
                         const canEditThisRole =
                           currentAdmin?.role === 'Super Admin' ||
                           (currentAdmin?.role === 'Admin' && role.name !== 'Super Admin');
 
+                        const perms = [
+                          { key: 'orders',   emoji: '📝', label: 'Orders',        desc: 'View & transition order statuses' },
+                          { key: 'catalog',  emoji: '🎂', label: 'Catalog',       desc: 'Add, edit & remove products' },
+                          { key: 'settings', emoji: '⚙️', label: 'Settings',      desc: 'Edit CMS content & site info' },
+                          { key: 'users',    emoji: '👤', label: 'Users',         desc: 'Create & manage admin users' },
+                          { key: 'delivery', emoji: '🚚', label: 'Delivery',      desc: 'Configure delivery zones & fees' },
+                        ] as const;
+
                         return (
-                          <div key={idx} className="border border-border/80 rounded-2xl p-4 bg-[#faf8f5] space-y-3 text-xs">
-                            <div className="flex justify-between items-center border-b border-border/40 pb-1.5">
-                              <p className="font-bold text-primary">{role.name}</p>
-                              {!canEditThisRole && <span className="text-[9px] text-muted-foreground italic font-semibold">(Read-only)</span>}
+                          <div key={idx} className="border border-[#eae2d8] bg-[#faf8f6] overflow-hidden rounded-xl">
+                            <div className="flex justify-between items-center px-4 py-3 border-b border-[#eae2d8] bg-white">
+                              <p className="font-extrabold text-[#8c3a1b] text-[12px]">{role.name}</p>
+                              {!canEditThisRole && (
+                                <span className="text-[9px] text-muted-foreground italic font-extrabold uppercase tracking-wide bg-muted/20 px-2 py-0.5 rounded">Read-only</span>
+                              )}
                             </div>
-                            <div className="grid grid-cols-2 gap-2.5 text-[10px] text-muted-foreground font-semibold uppercase">
-                              <label className="flex items-center gap-1.5 cursor-pointer">
-                                <input
-                                  type="checkbox"
-                                  disabled={!canEditThisRole}
-                                  checked={role.permissions.orders}
-                                  onChange={(e) => handleUpdateRolePermission(role.name, 'orders', e.target.checked)}
-                                  className="rounded text-primary h-3.5 w-3.5"
-                                />
-                                <span>📝 Orders</span>
-                              </label>
-                              <label className="flex items-center gap-1.5 cursor-pointer">
-                                <input
-                                  type="checkbox"
-                                  disabled={!canEditThisRole}
-                                  checked={role.permissions.catalog}
-                                  onChange={(e) => handleUpdateRolePermission(role.name, 'catalog', e.target.checked)}
-                                  className="rounded text-primary h-3.5 w-3.5"
-                                />
-                                <span>🎂 Catalog</span>
-                              </label>
-                              <label className="flex items-center gap-1.5 cursor-pointer">
-                                <input
-                                  type="checkbox"
-                                  disabled={!canEditThisRole}
-                                  checked={role.permissions.settings}
-                                  onChange={(e) => handleUpdateRolePermission(role.name, 'settings', e.target.checked)}
-                                  className="rounded text-primary h-3.5 w-3.5"
-                                />
-                                <span>⚙️ Settings</span>
-                              </label>
-                              <label className="flex items-center gap-1.5 cursor-pointer">
-                                <input
-                                  type="checkbox"
-                                  disabled={!canEditThisRole}
-                                  checked={role.permissions.users}
-                                  onChange={(e) => handleUpdateRolePermission(role.name, 'users', e.target.checked)}
-                                  className="rounded text-primary h-3.5 w-3.5"
-                                />
-                                <span>👤 Users</span>
-                              </label>
-                              <label className="flex items-center gap-1.5 cursor-pointer col-span-2">
-                                <input
-                                  type="checkbox"
-                                  disabled={!canEditThisRole}
-                                  checked={role.permissions.delivery || false}
-                                  onChange={(e) => handleUpdateRolePermission(role.name, 'delivery', e.target.checked)}
-                                  className="rounded text-primary h-3.5 w-3.5"
-                                />
-                                <span>🚚 Delivery Zones</span>
-                              </label>
+                            <div className="p-4 grid grid-cols-1 gap-2">
+                              {perms.map(({ key, emoji, label, desc }) => (
+                                <label key={key} className={`flex items-center gap-3 p-2.5 rounded-xl border transition-all cursor-pointer select-none ${
+                                  (role.permissions as any)[key]
+                                    ? 'border-primary/30 bg-primary/5'
+                                    : 'border-transparent hover:border-border hover:bg-white'
+                                } ${!canEditThisRole ? 'cursor-not-allowed opacity-60' : ''}`}>
+                                  <input
+                                    type="checkbox"
+                                    disabled={!canEditThisRole}
+                                    checked={(role.permissions as any)[key] || false}
+                                    onChange={(e) => handleUpdateRolePermission(role.name, key as any, e.target.checked)}
+                                    className="rounded border-border text-primary focus:ring-primary h-4 w-4 flex-shrink-0"
+                                  />
+                                  <span className="text-base leading-none">{emoji}</span>
+                                  <div>
+                                    <p className="font-extrabold text-foreground text-[11px] uppercase tracking-wide">{label}</p>
+                                    <p className="font-semibold text-muted-foreground text-[10px] mt-0.5">{desc}</p>
+                                  </div>
+                                </label>
+                              ))}
                             </div>
                           </div>
                         );
@@ -2015,331 +2522,637 @@ export default function AdminDashboard() {
                     </div>
                   </div>
 
-                  {/* Create New Role Card */}
-                  <form onSubmit={handleCreateRole} className="bg-white rounded-3xl border border-border p-6 shadow-sm space-y-4">
-                    <h4 className="font-display text-sm font-extrabold text-primary">Create Custom Role</h4>
-                    
-                    <div className="space-y-1.5 text-xs">
-                      <label className="text-[9px] font-extrabold uppercase text-muted-foreground tracking-wider">Role Title *</label>
-                      <input
-                        type="text"
-                        required
-                        value={newRoleName}
-                        onChange={(e) => setNewRoleName(e.target.value)}
-                        placeholder="e.g. Baker, Rider"
-                        className="w-full rounded-xl border border-border bg-[#faf8f5] p-3 outline-none focus:border-primary/50"
-                      />
+                  {/* Create New Role Form */}
+                  <form onSubmit={handleCreateRole} className="bg-white border border-border shadow-luxury overflow-hidden rounded-2xl">
+                    <div className="px-6 py-4 border-b border-border bg-[#faf8f6] flex items-center gap-2">
+                      <Plus className="h-4 w-4 text-primary" />
+                      <h4 className="font-display text-sm font-extrabold text-foreground">Create Custom Role</h4>
                     </div>
+                    <div className="p-6 space-y-5">
 
-                    {/* Permissions checklist */}
-                    <div className="space-y-2 text-xs font-semibold">
-                      <p className="text-[9px] font-extrabold uppercase text-muted-foreground tracking-wider mb-1">Set Permissions</p>
-                      
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <input type="checkbox" checked={rolePermOrders} onChange={(e) => setRolePermOrders(e.target.checked)} className="rounded text-primary" />
-                        <span>Manage / Transition Orders</span>
-                      </label>
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <input type="checkbox" checked={rolePermCatalog} onChange={(e) => setRolePermCatalog(e.target.checked)} className="rounded text-primary" />
-                        <span>Edit Catalog Items & Categories</span>
-                      </label>
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <input type="checkbox" checked={rolePermSettings} onChange={(e) => setRolePermSettings(e.target.checked)} className="rounded text-primary" />
-                        <span>Update Cover Details & Settings</span>
-                      </label>
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <input type="checkbox" checked={rolePermUsers} onChange={(e) => setRolePermUsers(e.target.checked)} className="rounded text-primary" />
-                        <span>Manage Users & Roles</span>
-                      </label>
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <input type="checkbox" checked={rolePermDelivery} onChange={(e) => setRolePermDelivery(e.target.checked)} className="rounded text-primary" />
-                        <span>Adjust Delivery Zone Fees</span>
-                      </label>
+                      {/* Role Name Input */}
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-extrabold uppercase text-muted-foreground tracking-widest">Role Title *</label>
+                        <input
+                          type="text"
+                          required
+                          value={newRoleName}
+                          onChange={(e) => setNewRoleName(e.target.value)}
+                          placeholder="e.g. Baker, Dispatch Rider"
+                          className="w-full border border-border bg-[#faf8f5] rounded-lg px-4 py-3 text-xs outline-none focus:border-accent font-semibold text-foreground transition-colors placeholder:text-muted-foreground/50"
+                        />
+                      </div>
+
+                      {/* Permissions Grid */}
+                      <div className="space-y-2">
+                        <p className="text-[10px] font-extrabold uppercase text-muted-foreground tracking-widest">Grant Permissions</p>
+                        <div className="space-y-2">
+                          {[
+                            { state: rolePermOrders,   setter: setRolePermOrders,   emoji: '📝', label: 'Orders Management',       desc: 'View & transition customer orders' },
+                            { state: rolePermCatalog,  setter: setRolePermCatalog,  emoji: '🎂', label: 'Catalog Management',      desc: 'Add, edit, and remove menu items' },
+                            { state: rolePermSettings, setter: setRolePermSettings, emoji: '⚙️', label: 'CMS & Site Settings',     desc: 'Edit homepage content & cover' },
+                            { state: rolePermUsers,    setter: setRolePermUsers,    emoji: '👤', label: 'User Administration',     desc: 'Create and manage admin accounts' },
+                            { state: rolePermDelivery, setter: setRolePermDelivery, emoji: '🚚', label: 'Delivery Zone Config',    desc: 'Set delivery areas and pricing' },
+                          ].map(({ state, setter, emoji, label, desc }) => (
+                            <label key={label} className={`flex items-center gap-3 p-3 rounded-xl border transition-all cursor-pointer select-none ${
+                              state ? 'border-primary/30 bg-primary/5' : 'border-border hover:border-accent/40 hover:bg-[#faf8f5]'
+                            }`}>
+                              <input
+                                type="checkbox"
+                                checked={state}
+                                onChange={(e) => setter(e.target.checked)}
+                                className="rounded border-border text-primary focus:ring-primary h-4 w-4 flex-shrink-0"
+                              />
+                              <span className="text-base leading-none">{emoji}</span>
+                              <div>
+                                <p className="font-extrabold text-foreground text-[11px] uppercase tracking-wide">{label}</p>
+                                <p className="font-semibold text-muted-foreground text-[10px] mt-0.5">{desc}</p>
+                              </div>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+
+                      <button
+                        type="submit"
+                        className="w-full rounded-xl bg-primary hover:bg-[#a34d2b] py-3.5 text-xs font-extrabold uppercase tracking-wider text-white shadow-md cursor-pointer transition-all active:scale-[0.98]"
+                      >
+                        Create Custom Role
+                      </button>
                     </div>
-
-                    <button
-                      type="submit"
-                      className="w-full rounded-full bg-primary py-2.5 text-xs font-bold text-white hover:bg-secondary shadow"
-                    >
-                      Create Custom Role
-                    </button>
                   </form>
-                </div>
 
-              </div>
+                </div>
+              )}
             </div>
           )}
 
           {activeTab === 'settings' && siteSettings && (
-            <div className="space-y-8 animate-fadeIn w-full">
-              <form onSubmit={handleSaveCmsSettings} className="space-y-8 bg-white rounded-3xl border border-border p-6 sm:p-8 shadow-sm">
-              <div className="border-b border-border pb-4">
-                <h3 className="font-display text-lg font-extrabold text-primary">Website Homepage & Company CMS Editor</h3>
-                <p className="text-xs text-muted-foreground mt-1 font-semibold">Change taglines, location addresses, and covers.</p>
+            <div className="space-y-6 animate-fadeIn w-full text-xs">
+
+              {/* Page Header */}
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                <div>
+                  <h3 className="font-display text-base font-extrabold text-foreground">Website CMS Editor</h3>
+                  <p className="text-xs text-muted-foreground mt-0.5 font-semibold">Manage homepage content, images, slides, and site configuration.</p>
+                </div>
               </div>
 
-              {/* Homepage Content */}
-              <div className="space-y-4">
-                <h4 className="text-xs font-bold text-primary uppercase tracking-wider">1. Landing Page Details</h4>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-extrabold uppercase text-muted-foreground">Hero Tagline</label>
-                    <input
-                      type="text"
-                      required
-                      disabled={!getPermission('settings')}
-                      value={siteSettings.home_tagline}
-                      onChange={(e) => setSiteSettings({ ...siteSettings, home_tagline: e.target.value })}
-                      className="w-full rounded-xl border border-border bg-background/10 p-3 text-xs outline-none focus:border-primary/50"
-                    />
+              {/* Sub-Tab Navigation Pills */}
+              <div className="flex flex-wrap gap-1 bg-[#f5f0ea] p-1.5 rounded-2xl border border-border w-fit">
+                {([
+                  { key: 'content',     label: '✏️ Content' },
+                  { key: 'images',      label: '🖼️ Images' },
+                  { key: 'seo',         label: '🎞️ Slides' },
+                  { key: 'maintenance', label: '⚠️ Maintenance' },
+                ] as { key: 'content' | 'images' | 'seo' | 'maintenance'; label: string }[]).map(({ key, label }) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setCmsSubTab(key)}
+                    className={`px-5 py-2 text-[11px] font-extrabold uppercase tracking-wide rounded-xl transition-all cursor-pointer ${
+                      cmsSubTab === key
+                        ? 'bg-white text-primary shadow-sm border border-border'
+                        : 'text-muted-foreground hover:text-foreground hover:bg-white/50'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+
+              {/* ── SUB-TAB: CONTENT ── */}
+              {cmsSubTab === 'content' && (
+                <form onSubmit={handleSaveCmsSettings} className="space-y-6">
+
+                  {/* Hero / Landing Page Section */}
+                  <div className="bg-white border border-border shadow-luxury overflow-hidden rounded-2xl">
+                    <div className="px-6 py-4 border-b border-border bg-[#faf8f6]">
+                      <h4 className="font-display text-sm font-extrabold text-foreground">🎉 Landing Page Details</h4>
+                      <p className="text-[10px] text-muted-foreground mt-0.5 font-semibold">Edit the main headline and description shown on the homepage hero section.</p>
+                    </div>
+                    <div className="p-6 space-y-5">
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-extrabold uppercase text-muted-foreground tracking-widest">Hero Tagline *</label>
+                        <input
+                          type="text"
+                          required
+                          disabled={!getPermission('settings')}
+                          value={siteSettings.home_tagline}
+                          onChange={(e) => setSiteSettings({ ...siteSettings, home_tagline: e.target.value })}
+                          placeholder="e.g. Handcrafted With Love"
+                          className="w-full border border-border bg-[#faf8f5] rounded-lg px-4 py-3 text-xs outline-none focus:border-accent font-semibold transition-colors text-foreground placeholder:text-muted-foreground/40"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-extrabold uppercase text-muted-foreground tracking-widest">Hero Description / Tagline Subtitle *</label>
+                        <textarea
+                          required
+                          disabled={!getPermission('settings')}
+                          value={siteSettings.home_details}
+                          onChange={(e) => setSiteSettings({ ...siteSettings, home_details: e.target.value })}
+                          rows={3}
+                          placeholder="A short description shown below the hero headline..."
+                          className="w-full border border-border bg-[#faf8f5] rounded-lg px-4 py-3 text-xs outline-none focus:border-accent font-semibold transition-colors text-foreground resize-none placeholder:text-muted-foreground/40"
+                        />
+                      </div>
+                    </div>
                   </div>
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-extrabold uppercase text-muted-foreground">Upload Hero Cover Photo *</label>
-                    <div className="relative border border-dashed border-border hover:border-primary/50 rounded-xl p-3 bg-background/10 text-center transition-colors">
-                      <input
-                        type="file"
-                        accept="image/*"
-                        disabled={!getPermission('settings')}
-                        onChange={async (e) => {
-                          const file = e.target.files?.[0];
-                          if (file) {
-                            try {
-                              const url = await uploadToStorage(file, 'media');
-                              setSiteSettings({ ...siteSettings, home_cover_photo: url });
-                            } catch (err) {
-                              alert('Failed to upload cover photo. Please try again.');
-                            }
-                          }
-                        }}
-                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                      />
-                      <div className="flex flex-col items-center justify-center gap-1.5 text-xs text-muted-foreground">
-                        <Upload className="h-4 w-4 text-primary" />
-                        {siteSettings.home_cover_photo ? (
-                          <span className="text-primary font-bold text-[9px] truncate max-w-xs">Cover Attached (Click to replace)</span>
-                        ) : (
-                          <span>Click to upload cover photo</span>
-                        )}
+
+                  {/* Company Details Section */}
+                  <div className="bg-white border border-border shadow-luxury overflow-hidden rounded-2xl">
+                    <div className="px-6 py-4 border-b border-border bg-[#faf8f6]">
+                      <h4 className="font-display text-sm font-extrabold text-foreground">🏢 Company Details</h4>
+                      <p className="text-[10px] text-muted-foreground mt-0.5 font-semibold">Contact information and brand story shown in the About and Footer sections.</p>
+                    </div>
+                    <div className="p-6 space-y-5">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-extrabold uppercase text-muted-foreground tracking-widest">Phone Number *</label>
+                          <input
+                            type="text"
+                            required
+                            disabled={!getPermission('settings')}
+                            value={siteSettings.company_phone}
+                            onChange={(e) => setSiteSettings({ ...siteSettings, company_phone: e.target.value })}
+                            placeholder="+94 77 000 0000"
+                            className="w-full border border-border bg-[#faf8f5] rounded-lg px-4 py-3 text-xs outline-none focus:border-accent font-semibold transition-colors text-foreground placeholder:text-muted-foreground/40"
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-extrabold uppercase text-muted-foreground tracking-widest">Email Address *</label>
+                          <input
+                            type="email"
+                            required
+                            disabled={!getPermission('settings')}
+                            value={siteSettings.company_email}
+                            onChange={(e) => setSiteSettings({ ...siteSettings, company_email: e.target.value })}
+                            placeholder="hello@peshababeshop.com"
+                            className="w-full border border-border bg-[#faf8f5] rounded-lg px-4 py-3 text-xs outline-none focus:border-accent font-semibold transition-colors text-foreground placeholder:text-muted-foreground/40"
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-extrabold uppercase text-muted-foreground tracking-widest">Bakery Location *</label>
+                          <input
+                            type="text"
+                            required
+                            disabled={!getPermission('settings')}
+                            value={siteSettings.company_location}
+                            onChange={(e) => setSiteSettings({ ...siteSettings, company_location: e.target.value })}
+                            placeholder="No. 12, Baker Street, Colombo"
+                            className="w-full border border-border bg-[#faf8f5] rounded-lg px-4 py-3 text-xs outline-none focus:border-accent font-semibold transition-colors text-foreground placeholder:text-muted-foreground/40"
+                          />
+                        </div>
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-extrabold uppercase text-muted-foreground tracking-widest">About Us Story *</label>
+                        <textarea
+                          required
+                          disabled={!getPermission('settings')}
+                          value={siteSettings.company_about}
+                          onChange={(e) => setSiteSettings({ ...siteSettings, company_about: e.target.value })}
+                          rows={5}
+                          placeholder="Share the story behind your bakery..."
+                          className="w-full border border-border bg-[#faf8f5] rounded-lg px-4 py-3 text-xs outline-none focus:border-accent font-semibold transition-colors text-foreground resize-none placeholder:text-muted-foreground/40"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Save CTA */}
+                  <div className="flex justify-end">
+                    <button
+                      type="submit"
+                      disabled={!getPermission('settings')}
+                      className="rounded-xl bg-primary hover:bg-[#a34d2b] text-white font-extrabold text-xs uppercase tracking-widest px-10 py-4 shadow-md transition-all active:scale-[0.98] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                    >
+                      <span>💾</span> Save Content Settings
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {/* ── SUB-TAB: IMAGES ── */}
+              {cmsSubTab === 'images' && (
+                <form onSubmit={handleSaveCmsSettings} className="space-y-6">
+
+                  {/* Hero Cover Photo */}
+                  <div className="bg-white border border-border shadow-luxury overflow-hidden rounded-2xl">
+                    <div className="px-6 py-4 border-b border-border bg-[#faf8f6]">
+                      <h4 className="font-display text-sm font-extrabold text-foreground">🖼️ Homepage Hero Cover</h4>
+                      <p className="text-[10px] text-muted-foreground mt-0.5 font-semibold">The main background photo shown in the hero section of your homepage.</p>
+                    </div>
+                    <div className="p-6">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 items-start">
+                        {/* Preview */}
+                        <div className="space-y-2">
+                          <p className="text-[10px] font-extrabold uppercase text-muted-foreground tracking-widest">Current Cover</p>
+                          <div className="border border-border bg-[#faf8f5] rounded-xl overflow-hidden aspect-video flex items-center justify-center">
+                            {siteSettings.home_cover_photo ? (
+                              <img src={siteSettings.home_cover_photo} alt="Hero Cover" className="w-full h-full object-cover" />
+                            ) : (
+                              <div className="flex flex-col items-center gap-2 text-muted-foreground/40 p-8">
+                                <Upload className="h-8 w-8" />
+                                <p className="text-[10px] font-semibold">No cover uploaded</p>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        {/* Upload */}
+                        <div className="space-y-2">
+                          <p className="text-[10px] font-extrabold uppercase text-muted-foreground tracking-widest">Upload New Cover</p>
+                          <div className="relative border-2 border-dashed border-accent/40 hover:border-accent bg-[#faf8f5] hover:bg-[#f5ede4]/30 rounded-xl transition-all cursor-pointer aspect-video flex items-center justify-center">
+                            <input
+                              type="file"
+                              accept="image/*"
+                              disabled={!getPermission('settings')}
+                              onChange={async (e) => {
+                                const file = e.target.files?.[0];
+                                if (file) {
+                                  try {
+                                    const url = await uploadToStorage(file, 'media');
+                                    setSiteSettings({ ...siteSettings, home_cover_photo: url });
+                                  } catch (err) {
+                                    showToast('error', 'Failed to upload cover photo. Please try again.');
+                                  }
+                                }
+                              }}
+                              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                            />
+                            <div className="flex flex-col items-center justify-center gap-3 p-8 pointer-events-none text-center">
+                              <div className="h-12 w-12 rounded-full bg-accent/10 flex items-center justify-center">
+                                <Upload className="h-5 w-5 text-accent" />
+                              </div>
+                              <div>
+                                <p className="font-extrabold text-foreground text-[11px]">Click to Upload</p>
+                                <p className="text-[10px] text-muted-foreground font-semibold mt-0.5">PNG, JPG, WEBP · Recommended 1920×1080</p>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Slide Images */}
+                  <div className="bg-white border border-border shadow-luxury overflow-hidden rounded-2xl">
+                    <div className="px-6 py-4 border-b border-border bg-[#faf8f6]">
+                      <h4 className="font-display text-sm font-extrabold text-foreground">🎞️ Hero Carousel Slide Images</h4>
+                      <p className="text-[10px] text-muted-foreground mt-0.5 font-semibold">Upload or replace the background image for each of the 4 homepage carousel slides.</p>
+                    </div>
+                    <div className="p-6 grid grid-cols-1 sm:grid-cols-2 gap-6">
+                      {[1, 2, 3, 4].map((slideNum) => (
+                        <div key={slideNum} className="space-y-2">
+                          <p className="text-[10px] font-extrabold uppercase text-muted-foreground tracking-widest">Slide {slideNum} Image</p>
+                          <div className="border border-border bg-[#faf8f5] rounded-xl overflow-hidden aspect-video flex items-center justify-center mb-2">
+                            {(siteSettings as any)[`slide${slideNum}_image`] ? (
+                              <img src={(siteSettings as any)[`slide${slideNum}_image`]} alt={`Slide ${slideNum}`} className="w-full h-full object-cover" />
+                            ) : (
+                              <div className="flex flex-col items-center gap-1.5 text-muted-foreground/30 p-4">
+                                <Upload className="h-6 w-6" />
+                                <p className="text-[10px] font-semibold">No image</p>
+                              </div>
+                            )}
+                          </div>
+                          <div className="relative border-2 border-dashed border-accent/30 hover:border-accent bg-[#faf8f5] hover:bg-[#f5ede4]/20 rounded-lg transition-all cursor-pointer py-4">
+                            <input
+                              type="file"
+                              accept="image/*"
+                              disabled={!getPermission('settings')}
+                              onChange={async (e) => {
+                                const file = e.target.files?.[0];
+                                if (file) {
+                                  try {
+                                    const url = await uploadToStorage(file, 'media');
+                                    setSiteSettings({ ...siteSettings, [`slide${slideNum}_image`]: url } as any);
+                                  } catch (err) {
+                                    showToast('error', 'Failed to upload slide image. Please try again.');
+                                  }
+                                }
+                              }}
+                              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                            />
+                            <div className="flex items-center justify-center gap-2 pointer-events-none">
+                              <Upload className="h-3.5 w-3.5 text-accent" />
+                              <p className="text-[10px] font-extrabold text-accent uppercase tracking-wide">
+                                {(siteSettings as any)[`slide${slideNum}_image`] ? 'Replace Image' : 'Upload Image'}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Save CTA */}
+                  <div className="flex justify-end">
+                    <button
+                      type="submit"
+                      disabled={!getPermission('settings')}
+                      className="rounded-xl bg-primary hover:bg-[#a34d2b] text-white font-extrabold text-xs uppercase tracking-widest px-10 py-4 shadow-md transition-all active:scale-[0.98] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                    >
+                      <span>💾</span> Save Image Settings
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {/* ── SUB-TAB: SLIDES / SEO ── */}
+              {cmsSubTab === 'seo' && (
+                <form onSubmit={handleSaveCmsSettings} className="space-y-6">
+                  <div className="bg-white border border-border shadow-luxury overflow-hidden rounded-2xl">
+                    <div className="px-6 py-4 border-b border-border bg-[#faf8f6] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div>
+                        <h4 className="font-display text-sm font-extrabold text-foreground">🎞️ Homepage Hero Slider Content</h4>
+                        <p className="text-[10px] text-muted-foreground mt-0.5 font-semibold">Customize the title, subtitle, tag, price, description, and CTA link for each slide.</p>
+                      </div>
+                      {/* Slide Selector */}
+                      <div className="flex gap-1 bg-[#faf8f5] p-1 border border-border rounded-xl overflow-hidden">
+                        {[1, 2, 3, 4].map((slideNum) => (
+                          <button
+                            key={slideNum}
+                            type="button"
+                            onClick={() => setActiveSlideTab(slideNum)}
+                            className={`px-4 py-2 text-[10px] font-extrabold uppercase rounded-lg transition-all cursor-pointer ${
+                              activeSlideTab === slideNum
+                                ? 'bg-primary text-white shadow-sm'
+                                : 'text-muted-foreground hover:text-primary hover:bg-[#eae2d8]/30'
+                            }`}
+                          >
+                            Slide {slideNum}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Slide fields */}
+                    <div className="p-6 space-y-5">
+                      {/* Slide preview mini-badge */}
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="h-6 w-6 rounded bg-primary flex items-center justify-center text-white text-[10px] font-extrabold">{activeSlideTab}</div>
+                        <span className="text-[11px] font-extrabold text-primary uppercase tracking-widest">Editing Slide {activeSlideTab}</span>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-extrabold uppercase text-muted-foreground tracking-widest">Slide Title *</label>
+                          <input
+                            type="text"
+                            required
+                            disabled={!getPermission('settings')}
+                            value={(siteSettings as any)[`slide${activeSlideTab}_title`] || ''}
+                            onChange={(e) => setSiteSettings({ ...siteSettings, [`slide${activeSlideTab}_title`]: e.target.value } as any)}
+                            className="w-full border border-border bg-[#faf8f5] rounded-lg px-4 py-3 text-xs outline-none focus:border-accent font-semibold text-foreground"
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-extrabold uppercase text-muted-foreground tracking-widest">Slide Subtitle *</label>
+                          <input
+                            type="text"
+                            required
+                            disabled={!getPermission('settings')}
+                            value={(siteSettings as any)[`slide${activeSlideTab}_subtitle`] || ''}
+                            onChange={(e) => setSiteSettings({ ...siteSettings, [`slide${activeSlideTab}_subtitle`]: e.target.value } as any)}
+                            className="w-full border border-border bg-[#faf8f5] rounded-lg px-4 py-3 text-xs outline-none focus:border-accent font-semibold text-foreground"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-extrabold uppercase text-muted-foreground tracking-widest">Tag Label (e.g. Bento Collection) *</label>
+                          <input
+                            type="text"
+                            required
+                            disabled={!getPermission('settings')}
+                            value={(siteSettings as any)[`slide${activeSlideTab}_tag`] || ''}
+                            onChange={(e) => setSiteSettings({ ...siteSettings, [`slide${activeSlideTab}_tag`]: e.target.value } as any)}
+                            className="w-full border border-border bg-[#faf8f5] rounded-lg px-4 py-3 text-xs outline-none focus:border-accent font-semibold text-foreground"
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-extrabold uppercase text-muted-foreground tracking-widest">Tag Icon (Emoji e.g. 🎁) *</label>
+                          <input
+                            type="text"
+                            required
+                            disabled={!getPermission('settings')}
+                            value={(siteSettings as any)[`slide${activeSlideTab}_tagIcon`] || ''}
+                            onChange={(e) => setSiteSettings({ ...siteSettings, [`slide${activeSlideTab}_tagIcon`]: e.target.value } as any)}
+                            className="w-full border border-border bg-[#faf8f5] rounded-lg px-4 py-3 text-xs outline-none focus:border-accent font-semibold text-foreground"
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-extrabold uppercase text-muted-foreground tracking-widest">Tag Detail (e.g. From LKR 2200) *</label>
+                          <input
+                            type="text"
+                            required
+                            disabled={!getPermission('settings')}
+                            value={(siteSettings as any)[`slide${activeSlideTab}_price`] || ''}
+                            onChange={(e) => setSiteSettings({ ...siteSettings, [`slide${activeSlideTab}_price`]: e.target.value } as any)}
+                            className="w-full border border-border bg-[#faf8f5] rounded-lg px-4 py-3 text-xs outline-none focus:border-accent font-semibold text-foreground"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-extrabold uppercase text-muted-foreground tracking-widest">Slide Description *</label>
+                          <textarea
+                            required
+                            disabled={!getPermission('settings')}
+                            value={(siteSettings as any)[`slide${activeSlideTab}_description`] || ''}
+                            onChange={(e) => setSiteSettings({ ...siteSettings, [`slide${activeSlideTab}_description`]: e.target.value } as any)}
+                            rows={4}
+                            className="w-full border border-border bg-[#faf8f5] rounded-lg px-4 py-3 text-xs outline-none focus:border-accent font-semibold text-foreground resize-none"
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-extrabold uppercase text-muted-foreground tracking-widest">CTA Action Link (e.g. /shop?category=bento-cakes) *</label>
+                          <input
+                            type="text"
+                            required
+                            disabled={!getPermission('settings')}
+                            value={(siteSettings as any)[`slide${activeSlideTab}_link`] || ''}
+                            onChange={(e) => setSiteSettings({ ...siteSettings, [`slide${activeSlideTab}_link`]: e.target.value } as any)}
+                            className="w-full border border-border bg-[#faf8f5] rounded-lg px-4 py-3 text-xs outline-none focus:border-accent font-semibold text-foreground"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Save CTA */}
+                  <div className="flex justify-end">
+                    <button
+                      type="submit"
+                      disabled={!getPermission('settings')}
+                      className="rounded-xl bg-primary hover:bg-[#a34d2b] text-white font-extrabold text-xs uppercase tracking-widest px-10 py-4 shadow-md transition-all active:scale-[0.98] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                    >
+                      <span>💾</span> Save Slide Settings
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {/* ── SUB-TAB: MAINTENANCE ── */}
+              {cmsSubTab === 'maintenance' && (
+                <div className="space-y-6">
+                  <div className="bg-white border border-rose-200 shadow-luxury overflow-hidden rounded-2xl">
+                    <div className="px-6 py-4 border-b border-rose-100 bg-rose-50/60 flex items-center gap-2">
+                      <AlertTriangle className="h-5 w-5 text-rose-600" />
+                      <div>
+                        <h4 className="font-display text-sm font-extrabold text-rose-600">Danger Zone — System Reset</h4>
+                        <p className="text-[10px] text-rose-500/80 font-semibold mt-0.5">Irreversible actions. Proceed with extreme caution.</p>
+                      </div>
+                    </div>
+                    <div className="p-6 space-y-5">
+                      <div className="border border-rose-100 bg-rose-50/30 p-4 rounded-xl space-y-2">
+                        <p className="text-[11px] font-extrabold text-rose-700 uppercase tracking-wide">⚠️ Reset System Database & Cache</p>
+                        <p className="text-[11px] text-muted-foreground leading-relaxed font-semibold">
+                          This action permanently deletes your active Supabase tables — Orders, Order Items, Payments, and all custom Products and Categories. It also clears the local browser cache. Use this only to wipe test data and restore to factory defaults.
+                        </p>
+                      </div>
+                      <div className="flex flex-col sm:flex-row gap-3 items-start">
+                        <button
+                          type="button"
+                          disabled={!getPermission('settings')}
+                          onClick={handleResetSystemData}
+                          className="rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs uppercase tracking-widest px-8 py-4 shadow-md transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer active:scale-[0.98] flex items-center gap-2"
+                        >
+                          <AlertTriangle className="h-4 w-4" />
+                          Reset System Database & Cache
+                        </button>
+                        <p className="text-[10px] text-muted-foreground font-semibold italic self-center">This action cannot be undone.</p>
                       </div>
                     </div>
                   </div>
                 </div>
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-extrabold uppercase text-muted-foreground">Hero cover Details / Tagline Description</label>
-                  <textarea
-                    required
-                    disabled={!getPermission('settings')}
-                    value={siteSettings.home_details}
-                    onChange={(e) => setSiteSettings({ ...siteSettings, home_details: e.target.value })}
-                    rows={3}
-                    className="w-full rounded-xl border border-border bg-background/10 p-3 text-xs outline-none focus:border-primary/50 resize-none"
-                  />
-                </div>
-              </div>
+              )}
 
-              {/* Company contact details */}
-              <div className="space-y-4 pt-4 border-t border-border/60">
-                <h4 className="text-xs font-bold text-primary uppercase tracking-wider">2. Company Details</h4>
-                
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-extrabold uppercase text-muted-foreground">Phone Number</label>
-                    <input
-                      type="text"
-                      required
-                      disabled={!getPermission('settings')}
-                      value={siteSettings.company_phone}
-                      onChange={(e) => setSiteSettings({ ...siteSettings, company_phone: e.target.value })}
-                      className="w-full rounded-xl border border-border bg-background/10 p-3 text-xs outline-none focus:border-primary/50"
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-extrabold uppercase text-muted-foreground">Email Address</label>
-                    <input
-                      type="email"
-                      required
-                      disabled={!getPermission('settings')}
-                      value={siteSettings.company_email}
-                      onChange={(e) => setSiteSettings({ ...siteSettings, company_email: e.target.value })}
-                      className="w-full rounded-xl border border-border bg-background/10 p-3 text-xs outline-none focus:border-primary/50"
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-extrabold uppercase text-muted-foreground">Bakery Location</label>
-                    <input
-                      type="text"
-                      required
-                      disabled={!getPermission('settings')}
-                      value={siteSettings.company_location}
-                      onChange={(e) => setSiteSettings({ ...siteSettings, company_location: e.target.value })}
-                      className="w-full rounded-xl border border-border bg-background/10 p-3 text-xs outline-none focus:border-primary/50"
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-extrabold uppercase text-muted-foreground">About Us Story Details</label>
-                  <textarea
-                    required
-                    disabled={!getPermission('settings')}
-                    value={siteSettings.company_about}
-                    onChange={(e) => setSiteSettings({ ...siteSettings, company_about: e.target.value })}
-                    rows={4}
-                    className="w-full rounded-xl border border-border bg-background/10 p-3 text-xs outline-none focus:border-primary/50 resize-none"
-                  />
-                </div>
-              </div>
-
-              </form>
-
-              {/* Danger Zone: Reset Section */}
-              <div className="bg-white rounded-3xl border border-rose-200 p-6 sm:p-8 shadow-sm space-y-4">
-                <div className="border-b border-rose-100 pb-4">
-                  <h3 className="font-display text-lg font-extrabold text-rose-600 flex items-center gap-2">
-                    <AlertTriangle className="h-5 w-5 text-rose-600" />
-                    <span>Danger Zone: Reset System Data</span>
-                  </h3>
-                  <p className="text-xs text-muted-foreground mt-1 font-semibold">
-                    Delete transaction logs, inventory custom additions, and reset caches back to defaults.
-                  </p>
-                </div>
-                
-                <p className="text-xs text-muted-foreground leading-relaxed font-sans font-medium">
-                  This action resets the local caching storage and empties your active Supabase tables (Orders, Order Items, Payments, custom Products and Categories). Use this if you want to wipe test transactions and reset to factory defaults.
-                </p>
-
-                <div className="pt-2">
-                  <button
-                    type="button"
-                    disabled={!getPermission('settings')}
-                    onClick={handleResetSystemData}
-                    className="w-full sm:w-auto rounded-full bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs uppercase px-8 py-3.5 shadow-md hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    Reset System Database &amp; Cache
-                  </button>
-                </div>
-              </div>
             </div>
           )}
 
+
           {/* TAB 7: DELIVERY ZONES */}
           {activeTab === 'delivery' && (
-            <div className="space-y-6 animate-fadeIn">
-              <div className="flex justify-between items-center">
+            <div className="space-y-6 animate-fadeIn text-xs">
+              <div className="flex justify-between items-center border-b border-border/45 pb-4">
                 <div>
-                  <h3 className="font-display text-base font-extrabold text-primary">Delivery Zones & Fees</h3>
+                  <h3 className="font-display text-base font-extrabold text-foreground">Delivery Zones & Fees</h3>
                   <p className="text-xs text-muted-foreground font-semibold">Set minimum order limits and flat-rate delivery charges.</p>
                 </div>
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
                 {/* Left side: Zones list table */}
-                <div className="lg:col-span-7 bg-white rounded-3xl border border-border overflow-hidden shadow-sm">
-                  <table className="w-full text-left text-xs border-collapse">
-                    <thead>
-                      <tr className="bg-muted/30 border-b border-border uppercase font-bold text-muted-foreground text-[10px] tracking-wider">
-                        <th className="p-4">Delivery Zone Name</th>
-                        <th className="p-4">Min Order Value</th>
-                        <th className="p-4">Delivery Fee (LKR)</th>
-                        <th className="p-4 text-center">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border/60 font-medium">
-                      {zones.map((zone) => (
-                        <tr key={zone.id} className="hover:bg-muted/10 transition-colors group">
-                          {/* Zone Name */}
-                          <td className="p-3 font-bold text-foreground-custom">
-                            {editingZoneId === zone.id ? (
-                              <input
-                                type="text"
-                                value={editZoneName}
-                                onChange={(e) => setEditZoneName(e.target.value)}
-                                className="w-full rounded-lg border border-primary/40 px-2.5 py-1.5 bg-background font-bold text-xs focus:outline-none focus:border-primary"
-                              />
-                            ) : zone.name}
-                          </td>
-                          {/* Min Order */}
-                          <td className="p-3 text-muted-foreground font-semibold">
-                            {editingZoneId === zone.id ? (
-                              <input
-                                type="number"
-                                value={editZoneMinOrder}
-                                onChange={(e) => setEditZoneMinOrder(Number(e.target.value))}
-                                className="w-28 rounded-lg border border-primary/40 px-2.5 py-1.5 bg-background font-bold text-xs focus:outline-none focus:border-primary"
-                              />
-                            ) : `LKR ${zone.minOrderValue.toLocaleString()}`}
-                          </td>
-                          {/* Fee */}
-                          <td className="p-3 font-bold text-primary">
-                            {editingZoneId === zone.id ? (
-                              <input
-                                type="number"
-                                value={editZoneFee}
-                                onChange={(e) => setEditZoneFee(Number(e.target.value))}
-                                className="w-24 rounded-lg border border-primary/40 px-2.5 py-1.5 bg-background font-bold text-primary text-xs focus:outline-none focus:border-primary"
-                              />
-                            ) : `LKR ${zone.fee.toLocaleString()}`}
-                          </td>
-                          {/* Actions */}
-                          <td className="p-3">
-                            {editingZoneId === zone.id ? (
-                              <div className="flex gap-1.5 justify-center">
-                                <button
-                                  onClick={() => handleSaveZoneFee(zone.id)}
-                                  className="rounded-lg bg-emerald-600 px-3 py-1.5 text-white hover:bg-emerald-700 flex items-center gap-1 text-[10px] font-bold"
-                                >
-                                  <Save className="h-3 w-3" /> Save
-                                </button>
-                                <button
-                                  onClick={() => setEditingZoneId(null)}
-                                  className="rounded-lg bg-white border border-border px-3 py-1.5 text-foreground hover:bg-muted flex items-center gap-1 text-[10px] font-bold"
-                                >
-                                  <X className="h-3 w-3" /> Cancel
-                                </button>
-                              </div>
-                            ) : (
-                              <div className="flex gap-1.5 justify-center">
-                                <button
-                                  disabled={!getPermission('delivery')}
-                                  title="Edit zone"
-                                  onClick={() => {
-                                    setEditingZoneId(zone.id);
-                                    setEditZoneName(zone.name);
-                                    setEditZoneMinOrder(zone.minOrderValue);
-                                    setEditZoneFee(zone.fee);
-                                  }}
-                                  className="rounded-lg bg-white border border-border p-1.5 text-primary hover:bg-primary/5 shadow-sm disabled:opacity-40 transition-colors"
-                                >
-                                  <Edit2 className="h-3.5 w-3.5" />
-                                </button>
-                                <button
-                                  disabled={!getPermission('delivery')}
-                                  title="Delete zone"
-                                  onClick={() => handleDeleteZone(zone.id)}
-                                  className="rounded-lg bg-white border border-rose-200 p-1.5 text-rose-500 hover:bg-rose-50 shadow-sm disabled:opacity-40 transition-colors"
-                                >
-                                  <Trash2 className="h-3.5 w-3.5" />
-                                </button>
-                              </div>
-                            )}
-                          </td>
+                <div className="lg:col-span-7 bg-white rounded-[2rem] border border-border overflow-hidden shadow-luxury">
+                  <div className="overflow-x-auto overflow-y-auto max-h-[500px] relative scrollbar-thin">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead>
+                        <tr className="sticky top-0 bg-[#faf8f6] border-b border-border uppercase font-bold text-foreground text-[9px] tracking-wider z-10 shadow-[0_1px_0_rgba(0,0,0,0.05)]">
+                          <th className="p-4 sticky top-0 bg-[#faf8f6] z-10">Delivery Zone Name</th>
+                          <th className="p-4 sticky top-0 bg-[#faf8f6] z-10">Min Order Value</th>
+                          <th className="p-4 sticky top-0 bg-[#faf8f6] z-10">Delivery Fee (LKR)</th>
+                          <th className="p-4 text-center sticky top-0 bg-[#faf8f6] z-10">Actions</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody className="divide-y divide-border/60 font-medium text-foreground">
+                        {zones.map((zone) => (
+                          <tr key={zone.id} className="hover:bg-[#faf8f5]/70 even:bg-[#fdfcfb]/45 transition-colors group">
+                            {/* Zone Name */}
+                            <td className="p-4 font-bold text-foreground">
+                              {editingZoneId === zone.id ? (
+                                <input
+                                  type="text"
+                                  value={editZoneName}
+                                  onChange={(e) => setEditZoneName(e.target.value)}
+                                  className="w-full rounded-xl border border-accent/40 px-2.5 py-1.5 bg-[#faf8f5] font-bold text-xs focus:outline-none focus:border-accent text-foreground"
+                                />
+                              ) : zone.name}
+                            </td>
+                            {/* Min Order */}
+                            <td className="p-4 text-muted-foreground font-semibold">
+                              {editingZoneId === zone.id ? (
+                                <input
+                                  type="number"
+                                  value={editZoneMinOrder}
+                                  onChange={(e) => setEditZoneMinOrder(Number(e.target.value))}
+                                  className="w-28 rounded-xl border border-accent/40 px-2.5 py-1.5 bg-[#faf8f5] font-bold text-xs focus:outline-none focus:border-accent text-foreground"
+                                />
+                              ) : `LKR ${zone.minOrderValue.toLocaleString()}`}
+                            </td>
+                            {/* Fee */}
+                            <td className="p-4 font-bold text-primary">
+                              {editingZoneId === zone.id ? (
+                                <input
+                                  type="number"
+                                  value={editZoneFee}
+                                  onChange={(e) => setEditZoneFee(Number(e.target.value))}
+                                  className="w-24 rounded-xl border border-accent/40 px-2.5 py-1.5 bg-[#faf8f5] font-bold text-primary text-xs focus:outline-none focus:border-accent text-primary"
+                                />
+                              ) : `LKR ${zone.fee.toLocaleString()}`}
+                            </td>
+                            {/* Actions */}
+                            <td className="p-4">
+                              {editingZoneId === zone.id ? (
+                                <div className="flex gap-1.5 justify-center">
+                                  <button
+                                    onClick={() => handleSaveZoneFee(zone.id)}
+                                    className="rounded-full bg-emerald-600 px-3.5 py-1.5 text-white hover:bg-emerald-700 flex items-center gap-1 text-[10px] font-extrabold uppercase tracking-wide cursor-pointer shadow-sm animate-fadeIn"
+                                  >
+                                    <Save className="h-3 w-3" /> Save
+                                  </button>
+                                  <button
+                                    onClick={() => setEditingZoneId(null)}
+                                    className="rounded-full bg-white border border-border px-3.5 py-1.5 text-foreground hover:bg-muted flex items-center gap-1 text-[10px] font-bold cursor-pointer transition-colors"
+                                  >
+                                    <X className="h-3 w-3" /> Cancel
+                                  </button>
+                                </div>
+                              ) : (
+                                <div className="flex gap-1.5 justify-center">
+                                  <button
+                                    disabled={!getPermission('delivery')}
+                                    title="Edit zone"
+                                    onClick={() => {
+                                      setEditingZoneId(zone.id);
+                                      setEditZoneName(zone.name);
+                                      setEditZoneMinOrder(zone.minOrderValue);
+                                      setEditZoneFee(zone.fee);
+                                    }}
+                                    className="rounded-full border border-border bg-[#faf8f6] p-2 text-primary hover:bg-muted transition-colors cursor-pointer disabled:opacity-40"
+                                  >
+                                    <Edit2 className="h-3.5 w-3.5" />
+                                  </button>
+                                  <button
+                                    disabled={!getPermission('delivery')}
+                                    title="Delete zone"
+                                    onClick={() => handleDeleteZone(zone.id)}
+                                    className="rounded-full border border-rose-200 bg-white p-2 text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer disabled:opacity-40"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </button>
+                                </div>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
 
                 {/* Right side: Add Custom Delivery Zone */}
                 <div className="lg:col-span-5 space-y-6">
-                  <form onSubmit={handleSaveInlineZone} className="bg-white rounded-3xl border border-border p-6 shadow-sm space-y-4">
-                    <h4 className="font-display text-sm font-extrabold text-primary flex items-center gap-1.5 border-b border-border/50 pb-2">
-                      <Plus className="h-4 w-4" />
+                  <form onSubmit={handleSaveInlineZone} className="bg-white rounded-[2rem] border border-border p-6 sm:p-8 shadow-luxury space-y-6">
+                    <h4 className="font-display text-sm font-extrabold text-foreground flex items-center gap-2 border-b border-border/50 pb-3">
+                      <Plus className="h-4 w-4 text-primary" />
                       <span>Add New Delivery Zone</span>
                     </h4>
 
                     <div className="space-y-4 text-xs font-sans">
-                      <div className="space-y-1.5">
-                        <label className="text-[9px] font-extrabold uppercase text-muted-foreground tracking-wider">Zone Name *</label>
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider">Zone Name *</label>
                         <input
                           type="text"
                           required
@@ -2347,31 +3160,31 @@ export default function AdminDashboard() {
                           value={inlineZoneName}
                           onChange={(e) => setInlineZoneName(e.target.value)}
                           placeholder="e.g. Battaramulla / Rajagiriya"
-                          className="w-full rounded-xl border border-border bg-[#faf8f5] p-3 outline-none focus:border-primary/50"
+                          className="w-full rounded-2xl border border-border bg-[#faf8f5] p-3.5 outline-none focus:border-accent font-semibold text-foreground"
                         />
                       </div>
 
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="space-y-1.5">
-                          <label className="text-[9px] font-extrabold uppercase text-muted-foreground tracking-wider">Min Order Value (LKR) *</label>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider">Min Order (LKR) *</label>
                           <input
                             type="number"
                             required
                             disabled={!getPermission('delivery')}
                             value={inlineZoneMinOrder}
                             onChange={(e) => setInlineZoneMinOrder(Number(e.target.value))}
-                            className="w-full rounded-xl border border-border bg-[#faf8f5] p-3 outline-none focus:border-primary/50"
+                            className="w-full rounded-2xl border border-border bg-[#faf8f5] p-3.5 outline-none focus:border-accent font-semibold text-foreground"
                           />
                         </div>
-                        <div className="space-y-1.5">
-                          <label className="text-[9px] font-extrabold uppercase text-muted-foreground tracking-wider">Delivery Fee (LKR) *</label>
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider">Delivery Fee (LKR) *</label>
                           <input
                             type="number"
                             required
                             disabled={!getPermission('delivery')}
                             value={inlineZoneFee}
                             onChange={(e) => setInlineZoneFee(Number(e.target.value))}
-                            className="w-full rounded-xl border border-border bg-[#faf8f5] p-3 outline-none focus:border-primary/50"
+                            className="w-full rounded-2xl border border-border bg-[#faf8f5] p-3.5 outline-none focus:border-accent font-semibold text-foreground"
                           />
                         </div>
                       </div>
@@ -2380,23 +3193,23 @@ export default function AdminDashboard() {
                     <button
                       type="submit"
                       disabled={!getPermission('delivery')}
-                      className="w-full rounded-full bg-primary py-3.5 font-bold uppercase tracking-widest text-white hover:bg-secondary shadow disabled:opacity-50 mt-2"
+                      className="w-full rounded-full bg-primary hover:bg-[#a34d2b] py-3.5 font-bold uppercase tracking-widest text-white shadow-md disabled:opacity-50 mt-4 transition-all active:scale-[0.98] cursor-pointer"
                     >
                       Save Delivery Zone
                     </button>
                   </form>
 
                   {/* Policy details card */}
-                  <div className="bg-white rounded-3xl border border-[#c5a880]/30 p-6 shadow-sm space-y-3">
-                    <h4 className="font-display text-sm font-extrabold text-primary">Delivery Limits Policy</h4>
-                    <div className="text-xs space-y-2.5 text-muted-foreground font-semibold">
-                      <div className="flex gap-2">
-                        <span className="text-primary">✦</span>
-                        <p><strong>Minimum Order Values:</strong> Gated checkout validation rule. Cart totals must exceed this threshold to trigger the delivery option.</p>
+                  <div className="bg-white rounded-[2rem] border border-accent/20 p-6 shadow-luxury space-y-4">
+                    <h4 className="font-display text-sm font-extrabold text-foreground border-b border-border/50 pb-2">Delivery Limits Policy</h4>
+                    <div className="text-xs space-y-3.5 text-muted-foreground font-semibold leading-relaxed">
+                      <div className="flex gap-2.5">
+                        <span className="text-accent font-bold">✦</span>
+                        <p className="text-foreground/75"><strong className="text-[#8c3a1b]">Minimum Order Values:</strong> Gated checkout validation rule. Cart totals must exceed this threshold to trigger the delivery option.</p>
                       </div>
-                      <div className="flex gap-2">
-                        <span className="text-primary">✦</span>
-                        <p><strong>Shipping Scope:</strong> Delivering exclusively to Colombo inner cities and Kaduwela suburbs to preserve cake freshness.</p>
+                      <div className="flex gap-2.5">
+                        <span className="text-accent font-bold">✦</span>
+                        <p className="text-foreground/75"><strong className="text-[#8c3a1b]">Shipping Scope:</strong> Delivering exclusively to Colombo inner cities and Kaduwela suburbs to preserve cake freshness.</p>
                       </div>
                     </div>
                   </div>
@@ -2412,31 +3225,31 @@ export default function AdminDashboard() {
       {/* MODAL 1: PRODUCT SKU ADD/EDIT */}
       {isProductModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto">
-          <form onSubmit={handleSaveProduct} className="bg-white rounded-3xl border border-border w-full max-w-2xl p-6 sm:p-8 space-y-6 shadow-2xl max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b border-border/60 pb-3">
-              <h3 className="font-display text-lg font-extrabold text-primary">
+          <form onSubmit={handleSaveProduct} className="bg-white rounded-[2rem] border border-border w-full max-w-2xl p-6 sm:p-8 space-y-6 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-border/60 pb-4">
+              <h3 className="font-display text-base font-extrabold text-foreground">
                 {editingProductId ? 'Edit Catalog Product Item' : 'Create New Catalog Product'}
               </h3>
-              <button type="button" onClick={() => setIsProductModalOpen(false)} className="text-muted-foreground hover:text-primary"><X className="h-5 w-5" /></button>
+              <button type="button" onClick={() => setIsProductModalOpen(false)} className="text-muted-foreground hover:text-foreground cursor-pointer"><X className="h-5 w-5" /></button>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-extrabold uppercase text-muted-foreground">Product Item Name *</label>
+              <div className="space-y-2">
+                <label className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider">Product Item Name *</label>
                 <input
                   type="text"
                   required
                   value={prodFormName}
                   onChange={(e) => setProdFormName(e.target.value)}
-                  className="w-full rounded-xl border border-border bg-background/10 p-3 text-xs outline-none focus:border-primary/50"
+                  className="w-full rounded-2xl border border-border bg-[#faf8f5] p-3 text-xs outline-none focus:border-accent font-semibold text-foreground"
                 />
               </div>
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-extrabold uppercase text-muted-foreground">Category *</label>
+              <div className="space-y-2">
+                <label className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider">Category *</label>
                 <select
                   value={prodFormCategory}
                   onChange={(e) => setProdFormCategory(e.target.value)}
-                  className="w-full rounded-xl border border-border bg-white p-3 text-xs outline-none focus:border-primary/50"
+                  className="w-full rounded-2xl border border-border bg-white p-3 text-xs outline-none focus:border-accent font-semibold text-foreground"
                 >
                   {categories.map((c) => (
                     <option key={c.id} value={c.id}>{c.name}</option>
@@ -2446,41 +3259,41 @@ export default function AdminDashboard() {
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-extrabold uppercase text-muted-foreground">Base Price (LKR) *</label>
+              <div className="space-y-2">
+                <label className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider">Base Price (LKR) *</label>
                 <input
                   type="number"
                   required
                   value={prodFormPrice}
                   onChange={(e) => setProdFormPrice(Number(e.target.value))}
-                  className="w-full rounded-xl border border-border bg-background/10 p-3 text-xs outline-none focus:border-primary/50"
+                  className="w-full rounded-2xl border border-border bg-[#faf8f5] p-3 text-xs outline-none focus:border-accent font-semibold text-foreground"
                 />
               </div>
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-extrabold uppercase text-muted-foreground">Bake Lead Time (Hours) *</label>
+              <div className="space-y-2">
+                <label className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider">Bake Lead Time (Hours) *</label>
                 <input
                   type="number"
                   required
                   value={prodFormLeadTime}
                   onChange={(e) => setProdFormLeadTime(Number(e.target.value))}
-                  className="w-full rounded-xl border border-border bg-background/10 p-3 text-xs outline-none focus:border-primary/50"
+                  className="w-full rounded-2xl border border-border bg-[#faf8f5] p-3 text-xs outline-none focus:border-accent font-semibold text-foreground"
                 />
               </div>
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-extrabold uppercase text-muted-foreground">Daily Order Cap (Qty)</label>
+              <div className="space-y-2">
+                <label className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider">Daily Order Cap (Qty)</label>
                 <input
                   type="number"
                   value={prodFormCap || ''}
                   onChange={(e) => setProdFormCap(e.target.value ? Number(e.target.value) : undefined)}
                   placeholder="Unlimited"
-                  className="w-full rounded-xl border border-border bg-background/10 p-3 text-xs outline-none focus:border-primary/50"
+                  className="w-full rounded-2xl border border-border bg-[#faf8f5] p-3 text-xs outline-none focus:border-accent font-semibold text-foreground"
                 />
               </div>
             </div>
 
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-extrabold uppercase text-muted-foreground">Upload Product Photo *</label>
-              <div className="relative border border-dashed border-border hover:border-primary/50 rounded-xl p-4 bg-background/10 text-center transition-colors">
+            <div className="space-y-2">
+              <label className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider">Upload Product Photo *</label>
+              <div className="relative border border-dashed border-border hover:border-accent/60 rounded-2xl p-5 bg-[#faf8f5] text-center transition-all cursor-pointer">
                 <input
                   type="file"
                   accept="image/*"
@@ -2496,10 +3309,10 @@ export default function AdminDashboard() {
                   }}
                   className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                 />
-                <div className="flex flex-col items-center justify-center gap-1.5 text-xs text-muted-foreground">
-                  <Upload className="h-5 w-5 text-primary" />
+                <div className="flex flex-col items-center justify-center gap-2 text-xs text-muted-foreground">
+                  <Upload className="h-5 w-5 text-accent" />
                   {prodFormImage ? (
-                    <span className="text-primary font-bold text-[10px] truncate max-w-xs">Photo attached (Click to replace)</span>
+                    <span className="text-primary font-bold text-xs truncate max-w-xs">Photo attached (Click to replace)</span>
                   ) : (
                     <span>Click or drag image to upload</span>
                   )}
@@ -2508,66 +3321,59 @@ export default function AdminDashboard() {
             </div>
 
             {/* Product Variants Settings (Sizes / Colors / Flavors) */}
-            <div className="space-y-3 border-t border-border/60 pt-4">
-              <h4 className="text-xs font-bold text-primary uppercase tracking-wider">Product Variants Configuration</h4>
+            <div className="space-y-4 border-t border-border/60 pt-4">
+              <h4 className="text-xs font-bold text-foreground uppercase tracking-widest">Product Variants Configuration</h4>
               
-              {/* Add Variant Box */}
-              <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 items-end bg-[#f8f6f0] p-3 rounded-2xl border border-border">
-                <div className="space-y-1">
-                  <label className="text-[9px] font-bold text-muted-foreground uppercase">Type</label>
+              <div className="bg-[#faf8f5] border border-border/80 rounded-2xl p-4.5 space-y-4">
+                <p className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider">Add Custom Sizing or Flavor Option</p>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   <select
                     value={newVarType}
                     onChange={(e) => setNewVarType(e.target.value as 'size' | 'flavor')}
-                    className="w-full rounded-lg border border-border bg-white p-2 text-xs outline-none"
+                    className="rounded-xl border border-border bg-white p-2.5 text-xs font-semibold outline-none focus:border-accent"
                   >
-                    <option value="size">Size / Weight</option>
-                    <option value="flavor">Frosting / Sponge</option>
+                    <option value="size">Size Variant</option>
+                    <option value="flavor">Flavor Variant</option>
                   </select>
-                </div>
-                <div className="space-y-1 sm:col-span-2">
-                  <label className="text-[9px] font-bold text-muted-foreground uppercase">Variant Name</label>
                   <input
                     type="text"
+                    placeholder="Name e.g. Large / Chocolate"
                     value={newVarName}
                     onChange={(e) => setNewVarName(e.target.value)}
-                    placeholder="e.g. 1.5kg, Red Velvet"
-                    className="w-full rounded-lg border border-border bg-white p-2 text-xs outline-none"
+                    className="rounded-xl border border-border bg-white px-3 py-2 text-xs outline-none focus:border-accent sm:col-span-2 font-semibold"
                   />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[9px] font-bold text-muted-foreground uppercase">Price Mod (+LKR)</label>
                   <input
                     type="number"
+                    placeholder="+Price LKR"
                     value={newVarPriceMod}
                     onChange={(e) => setNewVarPriceMod(Number(e.target.value))}
-                    className="w-full rounded-lg border border-border bg-white p-2 text-xs outline-none"
+                    className="rounded-xl border border-border bg-white px-3 py-2 text-xs outline-none focus:border-accent font-semibold"
                   />
                 </div>
+                <button
+                  type="button"
+                  onClick={handleAddVariant}
+                  className="rounded-full bg-primary hover:bg-[#a34d2b] px-4 py-2 text-xs font-bold text-white transition-all shadow-sm flex items-center justify-center gap-1.5 cursor-pointer ml-auto"
+                >
+                  <Plus className="h-3.5 w-3.5" /> Add Option
+                </button>
               </div>
-              <button
-                type="button"
-                onClick={handleAddVariant}
-                className="rounded bg-primary/10 px-3 py-1.5 text-xs font-bold text-primary hover:bg-primary hover:text-white transition-all flex items-center gap-1.5 w-fit"
-              >
-                <Plus className="h-4.5 w-4.5" />
-                <span>Add Variant Item</span>
-              </button>
 
-              {/* Variants List */}
-              <div className="space-y-1.5 max-h-[150px] overflow-y-auto pr-1">
+              {/* Active Variants list */}
+              <div className="space-y-2.5 max-h-[160px] overflow-y-auto pr-1">
                 {prodFormVariants.length === 0 ? (
-                  <p className="text-[10px] text-muted-foreground font-semibold">No custom variants. Users will purchase the base configuration.</p>
+                  <p className="text-[10px] text-muted-foreground text-center py-4 font-bold uppercase tracking-wider">No variants configured. Base price applies universally.</p>
                 ) : (
                   prodFormVariants.map((v) => (
-                    <div key={v.id} className="flex justify-between items-center bg-background rounded-lg border border-border p-2 text-xs">
+                    <div key={v.id} className="flex justify-between items-center bg-[#faf8f6] rounded-xl border border-border p-3 text-xs font-semibold">
                       <span>
-                        <span className="font-bold text-primary capitalize">[{v.variant_type}]</span> {v.name}{' '}
-                        {v.price_modifier > 0 && <span className="text-muted-foreground">(+LKR {v.price_modifier})</span>}
+                        <span className="font-extrabold text-primary uppercase mr-2 tracking-wider">[{v.variant_type}]</span> {v.name}{' '}
+                        {v.price_modifier > 0 && <span className="text-muted-foreground font-bold">(+LKR {v.price_modifier})</span>}
                       </span>
                       <button
                         type="button"
                         onClick={() => handleRemoveVariant(v.id)}
-                        className="text-rose-600 hover:bg-rose-50 p-1 rounded"
+                        className="text-rose-600 hover:bg-rose-50 p-1.5 rounded-full transition-colors cursor-pointer border border-transparent hover:border-rose-100"
                       >
                         <Trash2 className="h-4 w-4" />
                       </button>
@@ -2579,7 +3385,7 @@ export default function AdminDashboard() {
 
             <button
               type="submit"
-              className="w-full rounded-full bg-primary py-3.5 text-xs font-bold text-white hover:bg-secondary shadow"
+              className="w-full rounded-full bg-primary hover:bg-[#a34d2b] py-4 text-xs font-extrabold uppercase tracking-widest text-white shadow-md cursor-pointer transition-all active:scale-[0.98]"
             >
               Save Product SKU
             </button>
@@ -2590,42 +3396,42 @@ export default function AdminDashboard() {
       {/* MODAL 2: CATEGORY ADD/EDIT */}
       {isCategoryModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <form onSubmit={handleSaveCategory} className="bg-white rounded-3xl border border-border w-full max-w-md p-6 sm:p-8 space-y-6 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-border/60 pb-3">
-              <h3 className="font-display text-lg font-extrabold text-primary">
+          <form onSubmit={handleSaveCategory} className="bg-white rounded-[2rem] border border-border w-full max-w-md p-6 sm:p-8 space-y-6 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-border/60 pb-4">
+              <h3 className="font-display text-base font-extrabold text-foreground">
                 {editingCategoryId ? 'Edit Category Item' : 'Create New Category'}
               </h3>
-              <button type="button" onClick={() => setIsCategoryModalOpen(false)} className="text-muted-foreground hover:text-primary"><X className="h-5 w-5" /></button>
+              <button type="button" onClick={() => setIsCategoryModalOpen(false)} className="text-muted-foreground hover:text-foreground cursor-pointer"><X className="h-5 w-5" /></button>
             </div>
 
             <div className="space-y-4">
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-extrabold uppercase text-muted-foreground">Category Name *</label>
+              <div className="space-y-2">
+                <label className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider">Category Name *</label>
                 <input
                   type="text"
                   required
                   value={catFormName}
                   onChange={(e) => setCatFormName(e.target.value)}
                   placeholder="Bento Cakes"
-                  className="w-full rounded-xl border border-border bg-background/10 p-3 text-xs outline-none focus:border-primary/50"
+                  className="w-full rounded-2xl border border-border bg-[#faf8f5] p-3.5 text-xs outline-none focus:border-accent font-semibold text-foreground"
                 />
               </div>
 
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-extrabold uppercase text-muted-foreground">URL Slug *</label>
+              <div className="space-y-2">
+                <label className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider">URL Slug *</label>
                 <input
                   type="text"
                   required
                   value={catFormSlug}
                   onChange={(e) => setCatFormSlug(e.target.value)}
                   placeholder="bento-cakes"
-                  className="w-full rounded-xl border border-border bg-background/10 p-3 text-xs outline-none focus:border-primary/50"
+                  className="w-full rounded-2xl border border-border bg-[#faf8f5] p-3.5 text-xs outline-none focus:border-accent font-semibold text-foreground"
                 />
               </div>
 
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-extrabold uppercase text-muted-foreground">Upload Category Visual Photo *</label>
-                <div className="relative border border-dashed border-border hover:border-primary/50 rounded-xl p-4 bg-background/10 text-center transition-colors">
+              <div className="space-y-2">
+                <label className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider">Upload Category Visual Photo *</label>
+                <div className="relative border border-dashed border-border hover:border-accent/60 rounded-2xl p-5 bg-[#faf8f5] text-center transition-all cursor-pointer">
                   <input
                     type="file"
                     accept="image/*"
@@ -2641,10 +3447,10 @@ export default function AdminDashboard() {
                     }}
                     className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                   />
-                  <div className="flex flex-col items-center justify-center gap-1.5 text-xs text-muted-foreground">
-                    <Upload className="h-5 w-5 text-primary" />
+                  <div className="flex flex-col items-center justify-center gap-2 text-xs text-muted-foreground">
+                    <Upload className="h-5 w-5 text-accent" />
                     {catFormImage ? (
-                      <span className="text-primary font-bold text-[10px] truncate max-w-xs">Photo attached (Click to replace)</span>
+                      <span className="text-primary font-bold text-xs truncate max-w-xs">Photo attached (Click to replace)</span>
                     ) : (
                       <span>Click or drag image to upload</span>
                     )}
@@ -2652,20 +3458,20 @@ export default function AdminDashboard() {
                 </div>
               </div>
 
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-extrabold uppercase text-muted-foreground">Description</label>
+              <div className="space-y-2">
+                <label className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider">Description</label>
                 <textarea
                   value={catFormDesc}
                   onChange={(e) => setCatFormDesc(e.target.value)}
                   rows={2}
-                  className="w-full rounded-xl border border-border bg-background/10 p-3 text-xs outline-none focus:border-primary/50 resize-none"
+                  className="w-full rounded-2xl border border-border bg-[#faf8f5] p-3.5 text-xs outline-none focus:border-accent font-semibold text-foreground resize-none"
                 />
               </div>
             </div>
 
             <button
               type="submit"
-              className="w-full rounded-full bg-primary py-3.5 text-xs font-bold text-white hover:bg-secondary shadow"
+              className="w-full rounded-full bg-primary hover:bg-[#a34d2b] py-4 text-xs font-extrabold uppercase tracking-widest text-white shadow-md cursor-pointer transition-all active:scale-[0.98]"
             >
               Save Category
             </button>
@@ -2676,55 +3482,55 @@ export default function AdminDashboard() {
       {/* MODAL 3: CREATE USER ACCOUNT */}
       {isAddUserModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <form onSubmit={handleCreateUser} className="bg-white rounded-3xl border border-border w-full max-w-md p-6 sm:p-8 space-y-4 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-border/60 pb-3">
-              <h3 className="font-display text-lg font-extrabold text-primary">Create System Administrator</h3>
-              <button type="button" onClick={() => setIsAddUserModalOpen(false)} className="text-muted-foreground hover:text-primary"><X className="h-5 w-5" /></button>
+          <form onSubmit={handleCreateUser} className="bg-white rounded-[2rem] border border-border w-full max-w-md p-6 sm:p-8 space-y-5 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-border/60 pb-4">
+              <h3 className="font-display text-base font-extrabold text-foreground">Create System Administrator</h3>
+              <button type="button" onClick={() => setIsAddUserModalOpen(false)} className="text-muted-foreground hover:text-foreground cursor-pointer"><X className="h-5 w-5" /></button>
             </div>
 
-            <div className="space-y-3 font-sans text-xs">
-              <div className="space-y-1.5">
-                <label className="text-[9px] font-extrabold uppercase text-muted-foreground tracking-wider">Full Name *</label>
+            <div className="space-y-4 font-sans text-xs">
+              <div className="space-y-2">
+                <label className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider">Full Name *</label>
                 <input
                   type="text"
                   required
                   value={newUserName}
                   onChange={(e) => setNewUserName(e.target.value)}
                   placeholder="e.g. Amal Fernando"
-                  className="w-full rounded-xl border border-border bg-[#faf8f5] p-3 outline-none focus:border-primary/50"
+                  className="w-full rounded-2xl border border-border bg-[#faf8f5] p-3.5 outline-none focus:border-accent font-semibold text-foreground"
                 />
               </div>
 
-              <div className="space-y-1.5">
-                <label className="text-[9px] font-extrabold uppercase text-muted-foreground tracking-wider">Email Address *</label>
+              <div className="space-y-2">
+                <label className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider">Email Address *</label>
                 <input
                   type="email"
                   required
                   value={newUserEmail}
                   onChange={(e) => setNewUserEmail(e.target.value)}
                   placeholder="amal@pesha.lk"
-                  className="w-full rounded-xl border border-border bg-[#faf8f5] p-3 outline-none focus:border-primary/50"
+                  className="w-full rounded-2xl border border-border bg-[#faf8f5] p-3.5 outline-none focus:border-accent font-semibold text-foreground"
                 />
               </div>
 
-              <div className="space-y-1.5">
-                <label className="text-[9px] font-extrabold uppercase text-muted-foreground tracking-wider">Login Password *</label>
+              <div className="space-y-2">
+                <label className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider">Login Password *</label>
                 <input
                   type="password"
                   required
                   value={newUserPassword}
                   onChange={(e) => setNewUserPassword(e.target.value)}
                   placeholder="••••••••"
-                  className="w-full rounded-xl border border-border bg-[#faf8f5] p-3 outline-none focus:border-primary/50"
+                  className="w-full rounded-2xl border border-border bg-[#faf8f5] p-3.5 outline-none focus:border-accent font-semibold text-foreground"
                 />
               </div>
 
-              <div className="space-y-1.5">
-                <label className="text-[9px] font-extrabold uppercase text-muted-foreground tracking-wider">Assign Role *</label>
+              <div className="space-y-2">
+                <label className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider">Assign Role *</label>
                 <select
                   value={newUserRole}
                   onChange={(e) => setNewUserRole(e.target.value)}
-                  className="w-full rounded-xl border border-border bg-white p-3 outline-none focus:border-primary/50"
+                  className="w-full rounded-2xl border border-border bg-white p-3.5 outline-none focus:border-accent font-semibold text-foreground"
                 >
                   <option value="Super Admin">Super Admin</option>
                   <option value="Admin">Admin</option>
@@ -2740,7 +3546,7 @@ export default function AdminDashboard() {
 
             <button
               type="submit"
-              className="w-full rounded-full bg-primary py-3.5 font-bold uppercase tracking-widest text-white hover:bg-secondary shadow mt-2"
+              className="w-full rounded-full bg-primary hover:bg-[#a34d2b] py-4 font-bold uppercase tracking-widest text-white shadow-md cursor-pointer transition-all active:scale-[0.98] mt-2"
             >
               Register Account
             </button>
@@ -2754,20 +3560,56 @@ export default function AdminDashboard() {
           onClick={() => setActiveReceiptUrl(null)}
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4 animate-fadeIn cursor-pointer"
         >
-          <div className="relative max-w-3xl max-h-[85vh] bg-white rounded-2xl overflow-hidden p-3 shadow-2xl cursor-default">
+          <div className="relative max-w-3xl max-h-[85vh] bg-white rounded-[2rem] overflow-hidden p-4 shadow-2xl cursor-default border border-border">
             <button
               onClick={() => setActiveReceiptUrl(null)}
-              className="absolute top-4 right-4 z-10 rounded-full bg-black/60 p-2 text-white hover:bg-black/80 transition-colors"
+              className="absolute top-4 right-4 z-10 rounded-full bg-black/60 p-2 text-white hover:bg-black/85 transition-colors cursor-pointer"
             >
               <X className="h-5 w-5" />
             </button>
             <img
               src={activeReceiptUrl}
               alt="Bank Transfer Receipt"
-              className="w-full h-auto max-h-[80vh] object-contain rounded-lg"
+              className="w-full h-auto max-h-[75vh] object-contain rounded-2xl"
             />
-            <div className="p-3 text-center text-xs font-extrabold text-primary uppercase">
+            <div className="pt-4 text-center text-xs font-extrabold text-foreground uppercase tracking-wider">
               📜 Verified Bank Transaction Receipt Attachment
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Custom Confirmation Modal */}
+      {confirmModal.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-[2rem] border border-border w-full max-w-md p-6 sm:p-8 space-y-6 shadow-2xl">
+            <div className="flex items-center gap-3">
+              <div className={`p-2.5 rounded-full border ${confirmModal.isWarning ? 'bg-rose-50 border-rose-200 text-rose-600' : 'bg-amber-50/60 border-amber-200 text-amber-600'}`}>
+                <AlertTriangle className="h-6 w-6" />
+              </div>
+              <h3 className="font-display text-base font-extrabold text-foreground">{confirmModal.title}</h3>
+            </div>
+            <p className="text-xs font-bold text-muted-foreground leading-relaxed">
+              {confirmModal.message}
+            </p>
+            <div className="flex gap-3 justify-end pt-2">
+              <button
+                onClick={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+                className="rounded-full border border-border bg-[#faf8f5] px-5 py-2.5 text-xs font-bold text-foreground hover:bg-muted transition-all cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  confirmModal.onConfirm();
+                  setConfirmModal(prev => ({ ...prev, isOpen: false }));
+                }}
+                className={`rounded-full px-5 py-2.5 text-xs font-bold text-white transition-all shadow cursor-pointer active:scale-[0.98] ${
+                  confirmModal.isWarning ? 'bg-rose-600 hover:bg-rose-700' : 'bg-primary hover:bg-[#a34d2b]'
+                }`}
+              >
+                Confirm
+              </button>
             </div>
           </div>
         </div>

@@ -4,9 +4,10 @@ import React, { useEffect, useState, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { Clock, ShoppingBag, ArrowLeft, SlidersHorizontal } from 'lucide-react';
+import { useCart } from '@/context/CartContext';
+import { useToast } from '@/context/ToastContext';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
-import { useCart } from '@/context/CartContext';
 import { getProducts, getCategories, Product, Category } from '@/lib/data';
 import Link from 'next/link';
 
@@ -15,6 +16,7 @@ function ShopContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const { addToCart } = useCart();
+  const { showToast } = useToast();
 
   const [categories, setCategories] = useState<Category[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -22,6 +24,11 @@ function ShopContent() {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [sortBy, setSortBy] = useState<string>('featured');
   const [loading, setLoading] = useState(true);
+
+  const handleAddToCart = (product: Product) => {
+    addToCart(product, {}, 1);
+    showToast('success', `Added "${product.name}" to cart.`);
+  };
 
   // Read initial category filter from search params
   const categoryParam = searchParams.get('category');
@@ -147,17 +154,17 @@ function ShopContent() {
       {loading ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           {Array.from({ length: 8 }).map((_, i) => (
-            <div key={i} className="animate-pulse bg-muted rounded-2xl h-84" />
+            <div key={i} className="animate-pulse bg-muted h-84" />
           ))}
         </div>
       ) : filteredProducts.length === 0 ? (
-        <div className="text-center py-20 bg-white rounded-2xl border border-border/50">
+        <div className="text-center py-20 bg-white border border-border/50 rounded-[2rem] space-y-4 shadow-sm m-4">
           <span className="text-4xl">🎂</span>
           <h3 className="font-display text-xl font-bold mt-4 text-primary">No Cakes Found</h3>
           <p className="text-sm text-muted-foreground mt-1 max-w-xs mx-auto">We couldn't find any products in this category. Try switching filters!</p>
           <button
             onClick={() => handleCategorySelect('all')}
-            className="mt-6 rounded-full bg-primary px-6 py-2 text-xs font-bold text-white hover:bg-secondary transition-all"
+            className="mt-6 bg-primary px-6 py-2.5 text-xs font-bold text-white hover:bg-secondary transition-all rounded-xl shadow-sm"
           >
             Reset Filters
           </button>
@@ -171,14 +178,14 @@ function ShopContent() {
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ duration: 0.3 }}
-              className="flex flex-col bg-white rounded-2xl border border-border/50 shadow-sm overflow-hidden hover:shadow-md transition-shadow group relative"
+              className="flex flex-col bg-white border border-border/50 shadow-sm rounded-none overflow-hidden hover:shadow-md transition-shadow group relative"
             >
               {/* Floating lead time badge */}
-              <div className="absolute top-3 left-3 z-10 rounded-full bg-white/95 px-2.5 py-1 text-[10px] font-bold text-amber-800 shadow-sm flex items-center gap-1">
+              <div className="absolute top-3 left-3 z-10 bg-white/95 px-3 py-1 text-[10px] font-bold text-amber-800 shadow-sm flex items-center gap-1 rounded-none border border-amber-200/50">
                 <Clock className="h-3 w-3" />
                 <span>{product.lead_time_hours}h lead</span>
               </div>
-
+ 
               {/* Product Image */}
               <Link href={`/shop/${product.slug}`} className="aspect-square overflow-hidden bg-muted">
                 <img
@@ -187,7 +194,7 @@ function ShopContent() {
                   className="h-full w-full object-cover group-hover:scale-103 transition-transform duration-300"
                 />
               </Link>
-
+ 
               {/* Info */}
               <div className="p-4 flex-1 flex flex-col justify-between">
                 <div>
@@ -196,21 +203,21 @@ function ShopContent() {
                   </Link>
                   <p className="text-xs text-muted-foreground line-clamp-2 mt-1 leading-relaxed">{product.description}</p>
                 </div>
-
+ 
                 <div className="mt-4 flex items-center justify-between">
                   <span className="text-base font-extrabold text-primary">LKR {product.base_price.toLocaleString()}</span>
                   
                   {product.variants ? (
                     <Link
                       href={`/shop/${product.slug}`}
-                      className="inline-flex items-center justify-center rounded-full bg-primary/10 px-4 py-2 text-xs font-bold text-primary hover:bg-primary hover:text-white transition-colors"
+                      className="inline-flex items-center justify-center bg-primary/10 px-4 py-2 text-xs font-bold text-primary hover:bg-primary hover:text-white transition-colors rounded-none"
                     >
                       Customize
                     </Link>
                   ) : (
                     <button
-                      onClick={() => addToCart(product, {}, 1)}
-                      className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-primary text-white hover:bg-secondary transition-colors"
+                      onClick={() => handleAddToCart(product)}
+                      className="inline-flex h-9 w-9 items-center justify-center bg-primary text-white hover:bg-secondary transition-colors rounded-none"
                       aria-label="Add to cart"
                     >
                       <ShoppingBag className="h-4 w-4" />

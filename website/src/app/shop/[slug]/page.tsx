@@ -7,6 +7,7 @@ import { Clock, ShoppingBag, ArrowLeft, Check, Sparkles, MessageCircle } from 'l
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import { useCart } from '@/context/CartContext';
+import { useToast } from '@/context/ToastContext';
 import { getProductBySlug, Product } from '@/lib/data';
 
 interface PageProps {
@@ -17,6 +18,7 @@ export default function ProductDetail({ params }: PageProps) {
   const { slug } = use(params);
   const router = useRouter();
   const { addToCart } = useCart();
+  const { showToast } = useToast();
 
   const [product, setProduct] = useState<Product | null>(null);
   const [loading, setLoading] = useState(true);
@@ -101,9 +103,7 @@ export default function ProductDetail({ params }: PageProps) {
     }
 
     addToCart(finalProduct, variants, quantity);
-    
-    // Open cart drawer or show feedback
-    // The Navbar already listens, but we can direct user to checkout or show modal
+    showToast('success', `Added "${product.name}" to cart.`);
   };
 
   const sizes = product.variants?.filter(v => v.variant_type === 'size') || [];

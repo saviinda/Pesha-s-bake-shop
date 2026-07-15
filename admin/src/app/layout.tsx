@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Outfit } from "next/font/google";
+import { ToastProvider } from "@/context/ToastContext";
 import "./globals.css";
 
 const outfit = Outfit({
@@ -23,7 +24,9 @@ export default function RootLayout({
       lang="en"
       className={`${outfit.variable} font-sans h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        <ToastProvider>{children}</ToastProvider>
+      </body>
     </html>
   );
 }

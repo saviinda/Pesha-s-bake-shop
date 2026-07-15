@@ -7,11 +7,13 @@ import { ArrowLeft, Clock, MapPin, CheckCircle2, AlertTriangle, CreditCard, Uplo
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import { useCart } from '@/context/CartContext';
+import { useToast } from '@/context/ToastContext';
 import { getDeliveryZones, createOrder, getCurrentCustomer, DeliveryZone } from '@/lib/data';
 
 export default function Checkout() {
   const router = useRouter();
   const { cartItems, cartSubtotal, clearCart } = useCart();
+  const { showToast } = useToast();
 
   const [zones, setZones] = useState<DeliveryZone[]>([]);
   const [loading, setLoading] = useState(true);
@@ -99,7 +101,7 @@ export default function Checkout() {
   const selectedZone = zones.find(z => z.id === deliveryZoneId);
   const deliveryFee = selectedZone ? Number(selectedZone.fee) : 0;
   const minOrderValue = selectedZone ? Number(selectedZone.min_order_value) : 0;
-  const isMinOrderSatisfied = true;
+  const isMinOrderSatisfied = cartSubtotal >= minOrderValue;
   const grandTotal = cartSubtotal + deliveryFee;
 
   // Handle Receipt Upload conversion to base64
@@ -121,21 +123,26 @@ export default function Checkout() {
 
     if (cartItems.length === 0) {
       setFormError('Your cart is empty.');
+      showToast('warning', 'Your shopping cart is empty.');
       return;
     }
 
     if (!firstName || !phone || !line1 || !city || !deliveryZoneId || !deliveryDate) {
       setFormError('Please fill in all required fields marked with *');
+      showToast('warning', 'Please fill in all required fields marked with *');
       return;
     }
 
     if (!isMinOrderSatisfied) {
-      setFormError(`Minimum order value for ${selectedZone?.name} is LKR ${minOrderValue.toLocaleString()}`);
+      const errMsg = `Minimum order value for ${selectedZone?.name} is LKR ${minOrderValue.toLocaleString()}`;
+      setFormError(errMsg);
+      showToast('error', errMsg);
       return;
     }
 
     if (paymentMethod === 'transfer' && !receiptBase64) {
       setFormError('Please upload your money transfer transaction receipt.');
+      showToast('error', 'Please upload your money transfer transaction receipt.');
       return;
     }
 
@@ -164,6 +171,7 @@ export default function Checkout() {
 
       const res = await createOrder(orderPayload);
       if (res.success) {
+        showToast('success', 'Order placed successfully! Redirecting...');
         // Send confirmation email to the customer
         try {
           await fetch('/api/send-email', {
@@ -198,10 +206,12 @@ export default function Checkout() {
         router.push(`/track?orderId=${res.orderId}&phone=${phone}&created=true`);
       } else {
         setFormError(res.message || 'Failed to place order. Please try again.');
+        showToast('error', res.message || 'Failed to place order.');
       }
     } catch (e) {
       console.error('Checkout submit error:', e);
       setFormError('An unexpected error occurred. Please try again.');
+      showToast('error', 'An unexpected error occurred.');
     } finally {
       setSubmitting(false);
     }
@@ -507,7 +517,7 @@ export default function Checkout() {
             </form>
 
             {/* Order Summary Column */}
-            <div className="lg:col-span-5 bg-white rounded-3xl border border-border p-6 shadow-sm space-y-6 lg:sticky lg:top-24">
+            <div className="lg:col-span-5 bg-white rounded-[2rem] border border-border p-6 shadow-sm space-y-6 lg:sticky lg:top-24">
               <h2 className="font-display text-lg font-extrabold text-primary border-b border-border/50 pb-2">Order Summary</h2>
 
               {/* Items */}

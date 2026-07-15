@@ -102,6 +102,42 @@ export interface SiteSettings {
   company_phone: string;
   company_email: string;
   company_location: string;
+  // Slide 1
+  slide1_title: string;
+  slide1_subtitle: string;
+  slide1_description: string;
+  slide1_image: string;
+  slide1_link: string;
+  slide1_tag: string;
+  slide1_tagIcon: string;
+  slide1_price: string;
+  // Slide 2
+  slide2_title: string;
+  slide2_subtitle: string;
+  slide2_description: string;
+  slide2_image: string;
+  slide2_link: string;
+  slide2_tag: string;
+  slide2_tagIcon: string;
+  slide2_price: string;
+  // Slide 3
+  slide3_title: string;
+  slide3_subtitle: string;
+  slide3_description: string;
+  slide3_image: string;
+  slide3_link: string;
+  slide3_tag: string;
+  slide3_tagIcon: string;
+  slide3_price: string;
+  // Slide 4
+  slide4_title: string;
+  slide4_subtitle: string;
+  slide4_description: string;
+  slide4_image: string;
+  slide4_link: string;
+  slide4_tag: string;
+  slide4_tagIcon: string;
+  slide4_price: string;
 }
 
 // Initial Mock Seed Data
@@ -864,7 +900,43 @@ export const getAdminSiteSettings = async (): Promise<SiteSettings> => {
     company_about: 'Pesha\'s Bake Shop started as a hobby in a local kitchen in Kaduwela. We are now a premium online storefront delivering sweetness across Colombo!',
     company_phone: '+94 (77) 123 4567',
     company_email: 'peshasbakes@gmail.com',
-    company_location: 'Kaduwela, Colombo, Sri Lanka'
+    company_location: 'Kaduwela, Colombo, Sri Lanka',
+    // Slide 1 Defaults
+    slide1_title: "Korean Bento Cakes",
+    slide1_subtitle: "Handcrafted. Vintage Piping. Perfect for two.",
+    slide1_description: "Delightful custom vintage piping bento cakes made with fresh premium ingredients. Perfect mini creations to celebrate special moments.",
+    slide1_image: "https://images.unsplash.com/photo-1606890737304-57a1ca8a5b62?w=1920&q=80",
+    slide1_link: "/shop?category=bento-cakes",
+    slide1_tag: "Bento Collection",
+    slide1_tagIcon: "🍰",
+    slide1_price: "From LKR 2,200",
+    // Slide 2 Defaults
+    slide2_title: "Artisan Cupcakes",
+    slide2_subtitle: "Fluffy sponge. Pastel frosting. Baked daily.",
+    slide2_description: "Indulge in our box of pastel iced cupcakes. Beautiful custom designs to elevate your parties and surprise your loved ones.",
+    slide2_image: "https://images.unsplash.com/photo-1486427944299-d1955d23e317?w=1920&q=80",
+    slide2_link: "/shop?category=cupcakes",
+    slide2_tag: "Party Favorites",
+    slide2_tagIcon: "🧁",
+    slide2_price: "From LKR 250",
+    // Slide 3 Defaults
+    slide3_title: "Birthday Masterpieces",
+    slide3_subtitle: "Layered fudge. Custom decorations. Make a wish.",
+    slide3_description: "Exquisite double-chocolate ribbon cakes and multi-tiered custom birthday masterpieces baked fresh to order.",
+    slide3_image: "https://images.unsplash.com/photo-1519869325930-281384150729?w=1920&q=80",
+    slide3_link: "/shop?category=birthday-cakes",
+    slide3_tag: "Celebration Cakes",
+    slide3_tagIcon: "🎂",
+    slide3_price: "100% Customized",
+    // Slide 4 Defaults
+    slide4_title: "Anniversary Masterpieces",
+    slide4_subtitle: "Elegant rose piping. Baked with love.",
+    slide4_description: "Show your love with our classic retro piping design anniversary cakes, custom made to match your romance.",
+    slide4_image: "https://images.unsplash.com/photo-1578985545062-69928b1d9587?w=1920&q=80",
+    slide4_link: "/shop?category=anniversary-cakes",
+    slide4_tag: "Love & Romance",
+    slide4_tagIcon: "✨",
+    slide4_price: "Fresh on Demand"
   };
 
   if (isSupabaseConfigured()) {

@@ -11,11 +11,13 @@ import {
   getCurrentCustomer, logoutCustomer, getCustomerOrders,
   updateCustomerProfile, Customer
 } from '@/lib/data';
+import { useToast } from '@/context/ToastContext';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 
 export default function Profile() {
   const router = useRouter();
+  const { showToast } = useToast();
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -29,7 +31,6 @@ export default function Profile() {
   const [newPassword, setNewPassword]     = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [saving, setSaving]       = useState(false);
-  const [toast, setToast]         = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
 
   useEffect(() => {
     const activeCustomer = getCurrentCustomer();
@@ -56,11 +57,6 @@ export default function Profile() {
     }
     loadOrders();
   }, [router]);
-
-  const showToast = (type: 'success' | 'error', msg: string) => {
-    setToast({ type, msg });
-    setTimeout(() => setToast(null), 4000);
-  };
 
   const handleLogout = () => {
     logoutCustomer();
@@ -141,17 +137,6 @@ export default function Profile() {
     <>
       <Navbar />
 
-      {/* Toast Notification */}
-      {toast && (
-        <div className={`fixed top-20 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 px-5 py-3 rounded-2xl shadow-lg text-sm font-semibold animate-fadeIn
-          ${toast.type === 'success' ? 'bg-emerald-600 text-white' : 'bg-rose-600 text-white'}`}>
-          {toast.type === 'success'
-            ? <CheckCircle2 className="h-4 w-4 shrink-0" />
-            : <AlertCircle className="h-4 w-4 shrink-0" />}
-          {toast.msg}
-        </div>
-      )}
-
       <main className="min-h-[80vh] bg-gradient-to-b from-amber-50/20 to-amber-100/10 py-12">
         <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8 space-y-8">
 
@@ -182,7 +167,7 @@ export default function Profile() {
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
 
             {/* ── Account Details / Edit Form ── */}
-            <div className="lg:col-span-4 bg-white rounded-3xl border border-border p-6 shadow-sm space-y-5">
+            <div className="lg:col-span-4 bg-white rounded-[2rem] border border-border p-6 shadow-sm space-y-5">
               <div className="flex items-center justify-between">
                 <h3 className="font-display text-base font-extrabold text-primary">Account Details</h3>
                 {!editing && (
@@ -311,7 +296,7 @@ export default function Profile() {
               </h3>
 
               {orders.length === 0 ? (
-                <div className="text-center py-16 bg-white rounded-3xl border border-border space-y-4">
+                <div className="text-center py-16 bg-white rounded-[2rem] border border-border space-y-4">
                   <span className="text-4xl">🧁</span>
                   <h4 className="font-display text-lg font-bold text-primary">No Orders Placed Yet</h4>
                   <p className="text-muted-foreground text-sm max-w-xs mx-auto">
@@ -327,7 +312,7 @@ export default function Profile() {
               ) : (
                 <div className="space-y-4">
                   {orders.map((order) => (
-                    <div key={order.id} className="bg-white rounded-3xl border border-border p-6 shadow-sm space-y-4 hover:border-primary/20 transition-all">
+                    <div key={order.id} className="bg-white rounded-[2rem] border border-border p-6 shadow-sm space-y-4 hover:border-primary/20 transition-all">
                       <div className="flex justify-between items-start gap-4">
                         <div>
                           <p className="text-xs font-extrabold text-primary">Order #{order.id}</p>

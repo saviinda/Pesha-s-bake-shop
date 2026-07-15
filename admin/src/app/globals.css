@@ -1,19 +1,19 @@
 @import "tailwindcss";
 
 :root {
-  --background: #f8f6f0; /* Soft warm gray background */
-  --foreground: #2d1a0d; /* Very dark chocolate body text */
-  --primary: #92400e;    /* Warm brown */
+  --background: #fdfcfb; /* Clean warm ivory background */
+  --foreground: #1e110e; /* Luxurious deep cacao body text */
+  --primary: #8c3a1b;    /* Terracotta primary brick */
   --primary-foreground: #ffffff;
-  --secondary: #b45309;  /* Secondary warm brown */
+  --secondary: #4e3629;  /* Deep roasted hazelnut */
   --secondary-foreground: #ffffff;
-  --accent: #d97706;     /* Accent amber */
+  --accent: #c5a880;     /* Metallic champagne gold */
   --accent-foreground: #ffffff;
-  --card: #ffffff;       /* Pure white cards */
-  --card-foreground: #2d1a0d;
-  --border: #e6dfd5;     /* Soft warm gray borders */
-  --muted: #f1ebd9;
-  --muted-foreground: #78350f;
+  --card: #ffffff;       /* Pure white card backgrounds */
+  --card-foreground: #1e110e;
+  --border: #eae2d8;     /* Sophisticated warm linen borders */
+  --muted: #f7f3eb;      /* Soft warm muted fill */
+  --muted-foreground: #5e463a;
 }
 
 @theme {
@@ -43,16 +43,42 @@ body {
 
 /* Custom scrollbar */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
 }
 ::-webkit-scrollbar-track {
   background: var(--background);
 }
 ::-webkit-scrollbar-thumb {
-  background: var(--primary);
-  border-radius: 3px;
+  background: var(--border);
+  border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--secondary);
+  background: var(--accent);
+}
+
+/* Premium Custom Utilities */
+.bg-glass {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.text-gold-gradient {
+  background: linear-gradient(135deg, #c5a880 0%, #9e8460 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.shadow-luxury {
+  box-shadow: 0 8px 30px rgba(78, 54, 41, 0.02), 0 1px 3px rgba(78, 54, 41, 0.01);
+}
+
+.shadow-luxury-hover {
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.shadow-luxury-hover:hover {
+  box-shadow: 0 20px 40px rgba(78, 54, 41, 0.06), 0 2px 8px rgba(78, 54, 41, 0.02);
+  transform: translateY(-2px);
 }

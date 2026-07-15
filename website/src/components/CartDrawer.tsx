@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Trash2, Plus, Minus, ArrowRight, ShoppingBag } from 'lucide-react';
 import { useCart } from '@/context/CartContext';
+import { useToast } from '@/context/ToastContext';
 
 interface CartDrawerProps {
   isOpen: boolean;
@@ -13,6 +14,22 @@ interface CartDrawerProps {
 
 const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose }) => {
   const { cartItems, updateQuantity, removeFromCart, cartSubtotal } = useCart();
+  const { showToast } = useToast();
+
+  const handleUpdateQuantity = (itemId: string, name: string, newQty: number) => {
+    if (newQty < 1) {
+      removeFromCart(itemId);
+      showToast('info', `Removed "${name}" from cart.`);
+      return;
+    }
+    updateQuantity(itemId, newQty);
+    showToast('success', `Updated quantity of "${name}" in cart.`);
+  };
+
+  const handleRemoveFromCart = (itemId: string, name: string) => {
+    removeFromCart(itemId);
+    showToast('info', `Removed "${name}" from cart.`);
+  };
 
   return (
     <AnimatePresence>
@@ -33,13 +50,13 @@ const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose }) => {
             animate={{ x: 0 }}
             exit={{ x: '100%' }}
             transition={{ type: 'tween', duration: 0.3 }}
-            className="fixed right-0 top-0 bottom-0 z-50 flex h-full w-full max-w-md flex-col bg-white shadow-2xl"
+            className="fixed right-0 top-0 bottom-0 z-50 flex h-full w-full max-w-md flex-col bg-white shadow-2xl rounded-l-[2.5rem] overflow-hidden"
           >
             {/* Header */}
-            <div className="flex items-center justify-between border-b border-border p-4">
+            <div className="flex items-center justify-between border-b border-border p-5">
               <div className="flex items-center gap-2 text-primary font-semibold">
                 <ShoppingBag className="h-5 w-5" />
-                <h2>Your Shopping Cart</h2>
+                <h2 className="font-display text-lg font-bold">Your Shopping Cart</h2>
               </div>
               <button
                 onClick={onClose}
@@ -50,10 +67,10 @@ const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose }) => {
             </div>
 
             {/* Cart Items List */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            <div className="flex-1 overflow-y-auto p-5 space-y-5">
               {cartItems.length === 0 ? (
                 <div className="flex h-full flex-col items-center justify-center text-center p-6">
-                  <div className="rounded-full bg-background p-6 mb-4 text-primary animate-pulse">
+                  <div className="rounded-full bg-muted p-6 mb-4 text-primary animate-pulse">
                     <ShoppingBag className="h-12 w-12" />
                   </div>
                   <h3 className="font-display text-xl font-bold mb-1 text-primary">Your Cart is Empty</h3>
@@ -73,10 +90,10 @@ const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose }) => {
                     initial={{ opacity: 0, y: 15 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -15 }}
-                    className="flex gap-4 border-b border-border/50 pb-4"
+                    className="flex gap-4 border-b border-border/30 pb-5"
                   >
                     {/* Product Image */}
-                    <div className="relative h-20 w-20 flex-shrink-0 overflow-hidden rounded-lg bg-muted border border-border/50">
+                    <div className="relative h-20 w-20 flex-shrink-0 overflow-hidden rounded-[1.5rem] bg-muted border border-border/50">
                       <img
                         src={item.product.image_url}
                         alt={item.product.name}
@@ -111,16 +128,16 @@ const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose }) => {
 
                       {/* Quantity Selector & Price */}
                       <div className="mt-2 flex items-center justify-between">
-                        <div className="flex items-center gap-1 rounded-full border border-border p-0.5">
+                        <div className="flex items-center gap-1 rounded-full border border-border p-0.5 bg-[#fcfbf9]">
                           <button
-                            onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                            onClick={() => handleUpdateQuantity(item.id, item.product.name, item.quantity - 1)}
                             className="rounded-full p-1 text-foreground hover:bg-muted transition-colors"
                           >
                             <Minus className="h-3 w-3" />
                           </button>
                           <span className="w-8 text-center text-sm font-semibold">{item.quantity}</span>
                           <button
-                            onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                            onClick={() => handleUpdateQuantity(item.id, item.product.name, item.quantity + 1)}
                             className="rounded-full p-1 text-foreground hover:bg-muted transition-colors"
                           >
                             <Plus className="h-3 w-3" />
@@ -130,7 +147,7 @@ const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose }) => {
                         <div className="flex items-center gap-3">
                           <span className="text-sm font-bold text-primary">LKR {item.totalPrice.toLocaleString()}</span>
                           <button
-                            onClick={() => removeFromCart(item.id)}
+                            onClick={() => handleRemoveFromCart(item.id, item.product.name)}
                             className="text-muted-foreground hover:text-red-600 transition-colors"
                             aria-label="Remove item"
                           >
@@ -146,19 +163,19 @@ const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose }) => {
 
             {/* Footer summary and checkout CTA */}
             {cartItems.length > 0 && (
-              <div className="border-t border-border bg-muted/30 p-4 space-y-4">
+              <div className="border border-border/60 bg-muted/40 p-5 m-4 rounded-[2rem] space-y-4 shadow-sm">
                 <div className="flex justify-between text-base font-bold">
                   <span>Subtotal</span>
                   <span className="text-primary">LKR {cartSubtotal.toLocaleString()}</span>
                 </div>
-                <p className="text-[11px] text-muted-foreground">
+                <p className="text-[10px] text-muted-foreground leading-normal">
                   * Delivery fees are calculated on the next step based on your Colombo delivery zone.
                 </p>
                 <div className="grid grid-cols-1 gap-2">
                   <Link
                     href="/checkout"
                     onClick={onClose}
-                    className="flex w-full items-center justify-center gap-2 rounded-full bg-primary py-3 text-sm font-bold text-white shadow-md hover:bg-secondary transition-all"
+                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-bold text-white shadow-md hover:bg-secondary transition-all"
                   >
                     <span>Proceed to Checkout</span>
                     <ArrowRight className="h-4 w-4" />

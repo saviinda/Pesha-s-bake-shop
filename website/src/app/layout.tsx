@@ -3,6 +3,7 @@ import { Cormorant_Garamond, Outfit } from "next/font/google";
 import { CartProvider } from "@/context/CartContext";
 import MobileBottomNav from "@/components/MobileBottomNav";
 import SyncBridgeClient from "@/components/SyncBridgeClient";
+import { ToastProvider } from "@/context/ToastContext";
 import "./globals.css";
 
 const cormorant = Cormorant_Garamond({
@@ -34,11 +35,13 @@ export default function RootLayout({
       className={`${cormorant.variable} ${outfit.variable} font-sans h-full antialiased`}
     >
       <body className="min-h-full flex flex-col pb-16 md:pb-0">
-        <CartProvider>
-          {children}
-          <MobileBottomNav />
-          <SyncBridgeClient />
-        </CartProvider>
+        <ToastProvider>
+          <CartProvider>
+            {children}
+            <MobileBottomNav />
+            <SyncBridgeClient />
+          </CartProvider>
+        </ToastProvider>
       </body>
     </html>
   );
