@@ -30,21 +30,27 @@ const CartContext = createContext<CartContextType | undefined>(undefined);
 export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
 
-  // Load cart from localStorage on mount
+  // Load cart from localStorage on mount (server-safe for Vercel)
   useEffect(() => {
-    const savedCart = localStorage.getItem('peshas_cart');
-    if (savedCart) {
-      try {
+    if (typeof window === 'undefined') return;
+    try {
+      const savedCart = localStorage.getItem('peshas_cart');
+      if (savedCart) {
         setCartItems(JSON.parse(savedCart));
-      } catch (e) {
-        console.error('Failed to parse cart from localStorage:', e);
       }
+    } catch (e) {
+      console.warn('Failed to load cart from localStorage:', e);
     }
   }, []);
 
-  // Save cart to localStorage when changed
+  // Save cart to localStorage when changed (server-safe for Vercel)
   useEffect(() => {
-    localStorage.setItem('peshas_cart', JSON.stringify(cartItems));
+    if (typeof window === 'undefined') return;
+    try {
+      localStorage.setItem('peshas_cart', JSON.stringify(cartItems));
+    } catch (e) {
+      console.warn('Failed to save cart to localStorage:', e);
+    }
   }, [cartItems]);
 
   const addToCart = (

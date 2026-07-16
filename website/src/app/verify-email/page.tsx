@@ -26,22 +26,27 @@ function VerifyEmailContent() {
     if (s) {
       setStatus(s);
     } else if (token) {
-      // Local mode: mark localStorage token verified
+      // Local mode: mark localStorage token verified (server-safe for Vercel)
       if (typeof window !== 'undefined') {
-        const pending = JSON.parse(localStorage.getItem('peshas_pending_verification') || '{}');
-        if (pending[token]) {
-          const localCusts = JSON.parse(localStorage.getItem('peshas_local_customers') || '[]');
-          const idx = localCusts.findIndex((c: any) => c.verification_token === token);
-          if (idx !== -1) {
-            localCusts[idx].email_verified = true;
-            localCusts[idx].verification_token = null;
-            localStorage.setItem('peshas_local_customers', JSON.stringify(localCusts));
-            delete pending[token];
-            localStorage.setItem('peshas_pending_verification', JSON.stringify(pending));
+        try {
+          const pending = JSON.parse(localStorage.getItem('peshas_pending_verification') || '{}');
+          if (pending[token]) {
+            const localCusts = JSON.parse(localStorage.getItem('peshas_local_customers') || '[]');
+            const idx = localCusts.findIndex((c: any) => c.verification_token === token);
+            if (idx !== -1) {
+              localCusts[idx].email_verified = true;
+              localCusts[idx].verification_token = null;
+              localStorage.setItem('peshas_local_customers', JSON.stringify(localCusts));
+              delete pending[token];
+              localStorage.setItem('peshas_pending_verification', JSON.stringify(pending));
+            }
+            setStatus('success');
+          } else {
+            setStatus('invalid');
           }
-          setStatus('success');
-        } else {
-          setStatus('invalid');
+        } catch (e) {
+          console.warn('localStorage verification failed:', e);
+          setStatus('error');
         }
       }
     } else {

@@ -235,24 +235,29 @@ const MOCK_CUSTOMERS: Customer[] = [
   { id: 'c2e1d0f5-5683-4a1e-8e43-16a735c04003', email: 'dilshan@outlook.com', phone: '0722233445', firstName: 'Dilshan', lastName: 'Perera', createdAt: '2026-07-01T15:12:00Z' }
 ];
 
-// Local Storage Helpers
+// Local Storage Helpers (with server-safe fallback for Vercel)
 const getLocalStorage = (key: string, defaults: any) => {
   if (typeof window === 'undefined') return defaults;
-  const val = localStorage.getItem(key);
-  if (!val) {
-    localStorage.setItem(key, JSON.stringify(defaults));
-    return defaults;
-  }
   try {
+    const val = localStorage.getItem(key);
+    if (!val) {
+      localStorage.setItem(key, JSON.stringify(defaults));
+      return defaults;
+    }
     return JSON.parse(val);
   } catch (e) {
+    console.warn(`localStorage access failed for key "${key}":`, e);
     return defaults;
   }
 };
 
 const setLocalStorage = (key: string, data: any) => {
   if (typeof window !== 'undefined') {
-    localStorage.setItem(key, JSON.stringify(data));
+    try {
+      localStorage.setItem(key, JSON.stringify(data));
+    } catch (e) {
+      console.warn(`localStorage set failed for key "${key}":`, e);
+    }
   }
 };
 
@@ -716,13 +721,19 @@ export const resetSystemData = async (): Promise<boolean> => {
     }
   }
 
-  // Reset local storage cache completely
-  localStorage.removeItem('admin_orders');
-  localStorage.removeItem('peshas_orders');
-  localStorage.removeItem('admin_products');
-  localStorage.removeItem('admin_categories');
-  localStorage.removeItem('peshas_cms_settings');
-  localStorage.removeItem('peshas_simulated_emails');
+  // Reset local storage cache completely (with server-safe check)
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.removeItem('admin_orders');
+      localStorage.removeItem('peshas_orders');
+      localStorage.removeItem('admin_products');
+      localStorage.removeItem('admin_categories');
+      localStorage.removeItem('peshas_cms_settings');
+      localStorage.removeItem('peshas_simulated_emails');
+    } catch (e) {
+      console.warn('localStorage reset failed:', e);
+    }
+  }
   return true;
 };
 

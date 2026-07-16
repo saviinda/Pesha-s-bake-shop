@@ -246,24 +246,29 @@ export const MOCK_DELIVERY_ZONES: DeliveryZone[] = [
   { id: 'd3', name: 'Greater Colombo (Outer)', min_order_value: 3500, fee: 950 }
 ];
 
-// Local Storage Helpers
+// Local Storage Helpers (with server-safe fallback for Vercel)
 export const getLocalStorage = (key: string, defaults: any) => {
   if (typeof window === 'undefined') return defaults;
-  const val = localStorage.getItem(key);
-  if (!val) {
-    localStorage.setItem(key, JSON.stringify(defaults));
-    return defaults;
-  }
   try {
+    const val = localStorage.getItem(key);
+    if (!val) {
+      localStorage.setItem(key, JSON.stringify(defaults));
+      return defaults;
+    }
     return JSON.parse(val);
   } catch (e) {
+    console.warn(`localStorage access failed for key "${key}":`, e);
     return defaults;
   }
 };
 
 export const setLocalStorage = (key: string, data: any) => {
   if (typeof window !== 'undefined') {
-    localStorage.setItem(key, JSON.stringify(data));
+    try {
+      localStorage.setItem(key, JSON.stringify(data));
+    } catch (e) {
+      console.warn(`localStorage set failed for key "${key}":`, e);
+    }
   }
 };
 

@@ -2,6 +2,35 @@
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useToast } from '@/context/ToastContext';
+
+// Safe localStorage helpers for Vercel serverless environment
+const safeLocalStorageGet = (key: string): string | null => {
+  if (typeof window === 'undefined') return null;
+  try {
+    return localStorage.getItem(key);
+  } catch (e) {
+    console.warn(`localStorage get failed for key "${key}":`, e);
+    return null;
+  }
+};
+
+const safeLocalStorageSet = (key: string, value: string): void => {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(key, value);
+  } catch (e) {
+    console.warn(`localStorage set failed for key "${key}":`, e);
+  }
+};
+
+const safeLocalStorageRemove = (key: string): void => {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.removeItem(key);
+  } catch (e) {
+    console.warn(`localStorage remove failed for key "${key}":`, e);
+  }
+};
 import {
   LayoutDashboard,
   ShoppingBag,
@@ -365,16 +394,14 @@ export default function AdminDashboard() {
 
   // Check login session on load
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const savedSession = localStorage.getItem('peshas_admin_session');
-      if (savedSession) {
-        try {
-          const parsed = JSON.parse(savedSession);
-          setCurrentAdmin(parsed);
-          setIsAuthenticated(true);
-        } catch (e) {
-          localStorage.removeItem('peshas_admin_session');
-        }
+    const savedSession = safeLocalStorageGet('peshas_admin_session');
+    if (savedSession) {
+      try {
+        const parsed = JSON.parse(savedSession);
+        setCurrentAdmin(parsed);
+        setIsAuthenticated(true);
+      } catch (e) {
+        safeLocalStorageRemove('peshas_admin_session');
       }
     }
   }, []);
@@ -399,35 +426,33 @@ export default function AdminDashboard() {
       ]);
       
       // Load simulated emails log
-      if (typeof window !== 'undefined') {
-        setSimulatedEmails(JSON.parse(localStorage.getItem('peshas_simulated_emails') || '[]'));
-        
-        // Load custom user directories & roles
-        const storedUsers = localStorage.getItem('peshas_admin_users');
-        if (storedUsers) {
-          setAdminUsers(JSON.parse(storedUsers));
-        } else {
-          const defaults: AdminUser[] = [
-            { id: '1', name: 'Super Administrator', email: 'super@pesha.lk', role: 'Super Admin', status: 'active' },
-            { id: '2', name: 'Savi Indula', email: 'admin@pesha.lk', role: 'Admin', status: 'active' },
-            { id: '3', name: 'Kitchen Staff', email: 'staff@pesha.lk', role: 'Staff', status: 'active' }
-          ];
-          localStorage.setItem('peshas_admin_users', JSON.stringify(defaults));
-          setAdminUsers(defaults);
-        }
+      setSimulatedEmails(JSON.parse(safeLocalStorageGet('peshas_simulated_emails') || '[]'));
+      
+      // Load custom user directories & roles
+      const storedUsers = safeLocalStorageGet('peshas_admin_users');
+      if (storedUsers) {
+        setAdminUsers(JSON.parse(storedUsers));
+      } else {
+        const defaults: AdminUser[] = [
+          { id: '1', name: 'Super Administrator', email: 'super@pesha.lk', role: 'Super Admin', status: 'active' },
+          { id: '2', name: 'Savi Indula', email: 'admin@pesha.lk', role: 'Admin', status: 'active' },
+          { id: '3', name: 'Kitchen Staff', email: 'staff@pesha.lk', role: 'Staff', status: 'active' }
+        ];
+        safeLocalStorageSet('peshas_admin_users', JSON.stringify(defaults));
+        setAdminUsers(defaults);
+      }
 
-        const storedRoles = localStorage.getItem('peshas_admin_roles');
-        if (storedRoles) {
-          setCustomRoles(JSON.parse(storedRoles));
-        } else {
-          const defaults: CustomRole[] = [
-            { name: 'Super Admin', permissions: { orders: true, catalog: true, settings: true, users: true, delivery: true } },
-            { name: 'Admin', permissions: { orders: true, catalog: true, settings: true, users: false, delivery: true } },
-            { name: 'Staff', permissions: { orders: true, catalog: false, settings: false, users: false, delivery: false } }
-          ];
-          localStorage.setItem('peshas_admin_roles', JSON.stringify(defaults));
-          setCustomRoles(defaults);
-        }
+      const storedRoles = safeLocalStorageGet('peshas_admin_roles');
+      if (storedRoles) {
+        setCustomRoles(JSON.parse(storedRoles));
+      } else {
+        const defaults: CustomRole[] = [
+          { name: 'Super Admin', permissions: { orders: true, catalog: true, settings: true, users: true, delivery: true } },
+          { name: 'Admin', permissions: { orders: true, catalog: true, settings: true, users: false, delivery: true } },
+          { name: 'Staff', permissions: { orders: true, catalog: false, settings: false, users: false, delivery: false } }
+        ];
+        safeLocalStorageSet('peshas_admin_roles', JSON.stringify(defaults));
+        setCustomRoles(defaults);
       }
 
       setOrders(ords);
@@ -499,20 +524,20 @@ export default function AdminDashboard() {
 
     if (seedFound) {
       const session = { email: seedFound.email, name: seedFound.name, role: seedFound.role };
-      localStorage.setItem('peshas_admin_session', JSON.stringify(session));
+      safeLocalStorageSet('peshas_admin_session', JSON.stringify(session));
       setCurrentAdmin(session);
       setIsAuthenticated(true);
       return;
     }
 
     // Check dynamically created admin users
-    const allUsers = JSON.parse(localStorage.getItem('peshas_admin_users') || '[]');
+    const allUsers = JSON.parse(safeLocalStorageGet('peshas_admin_users') || '[]');
     const userFound = allUsers.find((u: any) => u.email.toLowerCase() === loginEmail.trim().toLowerCase() && u.status === 'active');
     
     // For demo purposes, dynamic users can log in with password 'pesha123'
     if (userFound && loginPassword === 'pesha123') {
       const session = { email: userFound.email, name: userFound.name, role: userFound.role };
-      localStorage.setItem('peshas_admin_session', JSON.stringify(session));
+      safeLocalStorageSet('peshas_admin_session', JSON.stringify(session));
       setCurrentAdmin(session);
       setIsAuthenticated(true);
       return;
@@ -523,7 +548,7 @@ export default function AdminDashboard() {
 
   // Handle Logout
   const handleLogout = () => {
-    localStorage.removeItem('peshas_admin_session');
+    safeLocalStorageRemove('peshas_admin_session');
     setCurrentAdmin(null);
     setIsAuthenticated(false);
     setLoginEmail('');
@@ -872,7 +897,7 @@ export default function AdminDashboard() {
     };
 
     const updated = [...adminUsers, newUser];
-    localStorage.setItem('peshas_admin_users', JSON.stringify(updated));
+    safeLocalStorageSet('peshas_admin_users', JSON.stringify(updated));
     setAdminUsers(updated);
 
     // Reset Form
@@ -891,7 +916,7 @@ export default function AdminDashboard() {
       }
       return u;
     });
-    localStorage.setItem('peshas_admin_users', JSON.stringify(updated));
+    safeLocalStorageSet('peshas_admin_users', JSON.stringify(updated));
     setAdminUsers(updated);
     showToast('success', 'User status updated.');
   };
@@ -920,7 +945,7 @@ export default function AdminDashboard() {
     };
 
     const updated = [...customRoles, newRole];
-    localStorage.setItem('peshas_admin_roles', JSON.stringify(updated));
+    safeLocalStorageSet('peshas_admin_roles', JSON.stringify(updated));
     setCustomRoles(updated);
 
     // Reset Form
@@ -957,7 +982,7 @@ export default function AdminDashboard() {
     });
 
     setCustomRoles(updated);
-    localStorage.setItem('peshas_admin_roles', JSON.stringify(updated));
+    safeLocalStorageSet('peshas_admin_roles', JSON.stringify(updated));
     showToast('success', 'Role permissions updated.');
   };
 
@@ -982,7 +1007,7 @@ export default function AdminDashboard() {
     });
 
     setAdminUsers(updated);
-    localStorage.setItem('peshas_admin_users', JSON.stringify(updated));
+    safeLocalStorageSet('peshas_admin_users', JSON.stringify(updated));
     showToast('success', "User's role updated successfully.");
   };
 

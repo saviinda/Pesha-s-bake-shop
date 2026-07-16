@@ -2,6 +2,26 @@
 
 import { useEffect } from 'react';
 
+// Safe localStorage access for Vercel serverless environment
+const safeGetItem = (key: string): string | null => {
+  if (typeof window === 'undefined') return null;
+  try {
+    return localStorage.getItem(key);
+  } catch (e) {
+    console.warn(`localStorage access failed for key "${key}":`, e);
+    return null;
+  }
+};
+
+const safeSetItem = (key: string, value: string): void => {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(key, value);
+  } catch (e) {
+    console.warn(`localStorage set failed for key "${key}":`, e);
+  }
+};
+
 export default function SyncBridgeClient() {
   useEffect(() => {
     const handleSyncMessage = (event: MessageEvent) => {
@@ -9,16 +29,16 @@ export default function SyncBridgeClient() {
         const { products, categories, settings } = event.data;
         
         let changed = false;
-        if (products && localStorage.getItem('admin_products') !== products) {
-          localStorage.setItem('admin_products', products);
+        if (products && safeGetItem('admin_products') !== products) {
+          safeSetItem('admin_products', products);
           changed = true;
         }
-        if (categories && localStorage.getItem('admin_categories') !== categories) {
-          localStorage.setItem('admin_categories', categories);
+        if (categories && safeGetItem('admin_categories') !== categories) {
+          safeSetItem('admin_categories', categories);
           changed = true;
         }
-        if (settings && localStorage.getItem('peshas_cms_settings') !== settings) {
-          localStorage.setItem('peshas_cms_settings', settings);
+        if (settings && safeGetItem('peshas_cms_settings') !== settings) {
+          safeSetItem('peshas_cms_settings', settings);
           changed = true;
         }
 
