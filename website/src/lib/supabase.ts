@@ -9,7 +9,7 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 export const isSupabaseConfigured = () => {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  return (
+  const configured = (
     !!url &&
     url !== '' &&
     !url.includes('placeholder') &&
@@ -17,6 +17,12 @@ export const isSupabaseConfigured = () => {
     key !== '' &&
     !key.includes('placeholder')
   );
+  
+  if (!configured && typeof window !== 'undefined') {
+    console.warn('Supabase not configured - using localStorage fallback. Check environment variables.');
+  }
+  
+  return configured;
 };
 
 export const uploadToStorage = async (
