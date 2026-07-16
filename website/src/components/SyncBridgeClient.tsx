@@ -44,10 +44,12 @@ export default function SyncBridgeClient() {
     };
   }, []);
 
+  const adminUrl = process.env.NEXT_PUBLIC_ADMIN_URL || 'http://localhost:3001';
+
   return (
     <iframe
       id="sync-bridge-iframe"
-      src="http://localhost:3001/sync-bridge"
+      src={`${adminUrl}/sync-bridge`}
       style={{ display: 'none', width: '0px', height: '0px' }}
       title="Local Storage Sync Bridge"
     />
