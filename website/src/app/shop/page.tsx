@@ -203,28 +203,17 @@ function ShopContent() {
                   <Link href={`/shop/${product.slug}`} className="hover:text-primary transition-colors">
                     <h3 className="font-display text-base font-bold line-clamp-1 leading-snug">{product.name}</h3>
                   </Link>
-                  <p className="text-xs text-muted-foreground line-clamp-2 mt-1 leading-relaxed">{product.description}</p>
                 </div>
  
                 <div className="mt-4 flex items-center justify-between">
                   <span className="text-base font-extrabold text-primary">LKR {product.base_price.toLocaleString()}</span>
                   
-                  {product.variants ? (
-                    <Link
-                      href={`/shop/${product.slug}`}
-                      className="inline-flex items-center justify-center bg-primary/10 px-4 py-2 text-xs font-bold text-primary hover:bg-primary hover:text-white transition-colors rounded-none"
-                    >
-                      Customize
-                    </Link>
-                  ) : (
-                    <button
-                      onClick={() => handleAddToCart(product)}
-                      className="inline-flex h-9 w-9 items-center justify-center bg-primary text-white hover:bg-secondary transition-colors rounded-none"
-                      aria-label="Add to cart"
-                    >
-                      <ShoppingBag className="h-4 w-4" />
-                    </button>
-                  )}
+                  <Link
+                    href={`/shop/${product.slug}`}
+                    className="inline-flex items-center justify-center bg-primary/10 px-4 py-2 text-xs font-bold text-primary hover:bg-primary hover:text-white transition-colors rounded-none"
+                  >
+                    View Details
+                  </Link>
                 </div>
               </div>
             </motion.div>

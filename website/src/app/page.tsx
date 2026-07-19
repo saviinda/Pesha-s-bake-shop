@@ -513,30 +513,17 @@ export default function Home() {
                       <Link href={`/shop/${product.slug}`} className="hover:text-[#c5a880] transition-colors block">
                         <h3 className="font-display text-base font-bold text-foreground line-clamp-1 leading-snug">{product.name}</h3>
                       </Link>
-                      <p className="text-xs text-muted-foreground line-clamp-2 mt-2 leading-relaxed font-sans font-semibold">{product.description}</p>
                     </div>
 
                     <div className="flex items-center justify-between border-t border-border/30 pt-4">
                       <span className="text-sm font-black text-foreground font-sans">LKR {product.base_price.toLocaleString()}</span>
                       
-                      {product.variants ? (
-                        <Link
-                          href={`/shop/${product.slug}`}
-                          className="inline-flex items-center justify-center rounded-full border border-primary/20 bg-primary/5 hover:bg-primary px-4.5 py-2 text-[10px] font-extrabold uppercase tracking-widest text-primary hover:text-white transition-all font-sans cursor-pointer shadow-sm"
-                        >
-                          Configure
-                        </Link>
-                      ) : (
-                        <button
-                          onClick={() => {
-                            addToCart(product, {}, 1);
-                          }}
-                          className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-primary hover:bg-[#a34d2b] text-white transition-all shadow-md cursor-pointer hover:scale-105 active:scale-95"
-                          aria-label="Add to cart"
-                        >
-                          <ShoppingBag className="h-4.5 w-4.5" />
-                        </button>
-                      )}
+                      <Link
+                        href={`/shop/${product.slug}`}
+                        className="inline-flex items-center justify-center rounded-full border border-primary/20 bg-primary/5 hover:bg-primary px-4.5 py-2 text-[10px] font-extrabold uppercase tracking-widest text-primary hover:text-white transition-all font-sans cursor-pointer shadow-sm"
+                      >
+                        View Details
+                      </Link>
                     </div>
                   </div>
                 </motion.div>
