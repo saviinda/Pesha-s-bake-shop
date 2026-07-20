@@ -558,6 +558,8 @@ export default function AdminDashboard() {
   // Check active permissions for the logged in role
   const getPermission = (type: keyof CustomRole['permissions']): boolean => {
     if (!currentAdmin) return false;
+    // Super Admin always has all permissions
+    if (currentAdmin.role === 'Super Admin') return true;
     const roleDef = customRoles.find(r => r.name === currentAdmin.role);
     if (!roleDef) return false;
     return roleDef.permissions[type];
@@ -2504,124 +2506,249 @@ export default function AdminDashboard() {
 
               {/* ── SUB-TAB: ROLES & PERMISSIONS ── */}
               {userSubTab === 'roles' && (
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+                <div className="space-y-8 animate-fadeIn w-full text-xs">
 
-                  {/* Existing Roles Permission Matrix */}
-                  <div className="bg-white border border-border shadow-luxury overflow-hidden rounded-2xl">
-                    <div className="px-6 py-4 border-b border-border bg-[#faf8f6] flex items-center gap-2">
-                      <Layers className="h-4 w-4 text-primary" />
-                      <h4 className="font-display text-sm font-extrabold text-foreground">Configured Roles</h4>
-                      <span className="ml-1 rounded-full bg-primary/10 px-2 py-0.5 text-[9px] font-extrabold text-primary uppercase">{customRoles.length} roles</span>
+                  {/* Page Header with Search & Filter */}
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                    <div>
+                      <h3 className="font-display text-lg font-extrabold text-foreground">Roles & Permissions</h3>
+                      <p className="text-xs text-muted-foreground mt-1 font-semibold">Manage system roles and configure access permissions</p>
                     </div>
-                    <div className="p-6 space-y-4">
-                      {customRoles.map((role, idx) => {
-                        const canEditThisRole =
-                          currentAdmin?.role === 'Super Admin' ||
-                          (currentAdmin?.role === 'Admin' && role.name !== 'Super Admin');
-
-                        const perms = [
-                          { key: 'orders',   emoji: '📝', label: 'Orders',        desc: 'View & transition order statuses' },
-                          { key: 'catalog',  emoji: '🎂', label: 'Catalog',       desc: 'Add, edit & remove products' },
-                          { key: 'settings', emoji: '⚙️', label: 'Settings',      desc: 'Edit CMS content & site info' },
-                          { key: 'users',    emoji: '👤', label: 'Users',         desc: 'Create & manage admin users' },
-                          { key: 'delivery', emoji: '🚚', label: 'Delivery',      desc: 'Configure delivery zones & fees' },
-                        ] as const;
-
-                        return (
-                          <div key={idx} className="border border-[#eae2d8] bg-[#faf8f6] overflow-hidden rounded-xl">
-                            <div className="flex justify-between items-center px-4 py-3 border-b border-[#eae2d8] bg-white">
-                              <p className="font-extrabold text-[#8c3a1b] text-[12px]">{role.name}</p>
-                              {!canEditThisRole && (
-                                <span className="text-[9px] text-muted-foreground italic font-extrabold uppercase tracking-wide bg-muted/20 px-2 py-0.5 rounded">Read-only</span>
-                              )}
-                            </div>
-                            <div className="p-4 grid grid-cols-1 gap-2">
-                              {perms.map(({ key, emoji, label, desc }) => (
-                                <label key={key} className={`flex items-center gap-3 p-2.5 rounded-xl border transition-all cursor-pointer select-none ${
-                                  (role.permissions as any)[key]
-                                    ? 'border-primary/30 bg-primary/5'
-                                    : 'border-transparent hover:border-border hover:bg-white'
-                                } ${!canEditThisRole ? 'cursor-not-allowed opacity-60' : ''}`}>
-                                  <input
-                                    type="checkbox"
-                                    disabled={!canEditThisRole}
-                                    checked={(role.permissions as any)[key] || false}
-                                    onChange={(e) => handleUpdateRolePermission(role.name, key as any, e.target.checked)}
-                                    className="rounded border-border text-primary focus:ring-primary h-4 w-4 flex-shrink-0"
-                                  />
-                                  <span className="text-base leading-none">{emoji}</span>
-                                  <div>
-                                    <p className="font-extrabold text-foreground text-[11px] uppercase tracking-wide">{label}</p>
-                                    <p className="font-semibold text-muted-foreground text-[10px] mt-0.5">{desc}</p>
-                                  </div>
-                                </label>
-                              ))}
-                            </div>
-                          </div>
-                        );
-                      })}
+                    <div className="flex items-center gap-3">
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                        <input
+                          type="text"
+                          placeholder="Search roles..."
+                          className="pl-9 pr-4 py-2.5 rounded-xl border border-border bg-white text-xs font-semibold outline-none focus:border-primary/50 transition-colors w-48"
+                        />
+                      </div>
+                      <button
+                        onClick={() => setIsAddUserModalOpen(true)}
+                        className="rounded-xl bg-gradient-to-r from-primary to-[#a34d2b] hover:from-[#a34d2b] hover:to-primary px-5 py-2.5 text-xs font-extrabold uppercase tracking-wider text-white shadow-lg hover:shadow-xl transition-all flex items-center gap-2 cursor-pointer active:scale-[0.98]"
+                      >
+                        <Plus className="h-4 w-4" />
+                        <span>Create Role</span>
+                      </button>
                     </div>
                   </div>
 
-                  {/* Create New Role Form */}
-                  <form onSubmit={handleCreateRole} className="bg-white border border-border shadow-luxury overflow-hidden rounded-2xl">
-                    <div className="px-6 py-4 border-b border-border bg-[#faf8f6] flex items-center gap-2">
-                      <Plus className="h-4 w-4 text-primary" />
-                      <h4 className="font-display text-sm font-extrabold text-foreground">Create Custom Role</h4>
-                    </div>
-                    <div className="p-6 space-y-5">
-
-                      {/* Role Name Input */}
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] font-extrabold uppercase text-muted-foreground tracking-widest">Role Title *</label>
-                        <input
-                          type="text"
-                          required
-                          value={newRoleName}
-                          onChange={(e) => setNewRoleName(e.target.value)}
-                          placeholder="e.g. Baker, Dispatch Rider"
-                          className="w-full border border-border bg-[#faf8f5] rounded-lg px-4 py-3 text-xs outline-none focus:border-accent font-semibold text-foreground transition-colors placeholder:text-muted-foreground/50"
-                        />
+                  {/* Roles Table Section */}
+                  <div className="bg-white rounded-3xl border border-border/60 shadow-luxury overflow-hidden">
+                    {/* Table Header */}
+                    <div className="px-8 py-5 border-b border-border/50 bg-gradient-to-r from-[#faf8f6] to-white flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2.5 bg-primary/10 rounded-xl">
+                          <Layers className="h-5 w-5 text-primary" />
+                        </div>
+                        <div>
+                          <h4 className="font-display text-sm font-extrabold text-foreground">System Roles</h4>
+                          <p className="text-[10px] text-muted-foreground font-semibold mt-0.5">{customRoles.length} configured roles</p>
+                        </div>
                       </div>
+                      <div className="flex items-center gap-2">
+                        <button className="p-2 rounded-lg border border-border/50 bg-white hover:bg-[#faf8f6] text-muted-foreground hover:text-foreground transition-all cursor-pointer">
+                          <RefreshCw className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
 
-                      {/* Permissions Grid */}
-                      <div className="space-y-2">
-                        <p className="text-[10px] font-extrabold uppercase text-muted-foreground tracking-widest">Grant Permissions</p>
-                        <div className="space-y-2">
-                          {[
-                            { state: rolePermOrders,   setter: setRolePermOrders,   emoji: '📝', label: 'Orders Management',       desc: 'View & transition customer orders' },
-                            { state: rolePermCatalog,  setter: setRolePermCatalog,  emoji: '🎂', label: 'Catalog Management',      desc: 'Add, edit, and remove menu items' },
-                            { state: rolePermSettings, setter: setRolePermSettings, emoji: '⚙️', label: 'CMS & Site Settings',     desc: 'Edit homepage content & cover' },
-                            { state: rolePermUsers,    setter: setRolePermUsers,    emoji: '👤', label: 'User Administration',     desc: 'Create and manage admin accounts' },
-                            { state: rolePermDelivery, setter: setRolePermDelivery, emoji: '🚚', label: 'Delivery Zone Config',    desc: 'Set delivery areas and pricing' },
-                          ].map(({ state, setter, emoji, label, desc }) => (
-                            <label key={label} className={`flex items-center gap-3 p-3 rounded-xl border transition-all cursor-pointer select-none ${
-                              state ? 'border-primary/30 bg-primary/5' : 'border-border hover:border-accent/40 hover:bg-[#faf8f5]'
-                            }`}>
-                              <input
-                                type="checkbox"
-                                checked={state}
-                                onChange={(e) => setter(e.target.checked)}
-                                className="rounded border-border text-primary focus:ring-primary h-4 w-4 flex-shrink-0"
-                              />
-                              <span className="text-base leading-none">{emoji}</span>
-                              <div>
-                                <p className="font-extrabold text-foreground text-[11px] uppercase tracking-wide">{label}</p>
-                                <p className="font-semibold text-muted-foreground text-[10px] mt-0.5">{desc}</p>
-                              </div>
-                            </label>
-                          ))}
+                    {/* Modern Data Table */}
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left border-collapse">
+                        <thead>
+                          <tr className="bg-[#f5f0ea]/50 border-b border-border/60">
+                            <th className="px-8 py-4 text-[10px] font-extrabold uppercase tracking-widest text-muted-foreground">Role Name</th>
+                            <th className="px-8 py-4 text-[10px] font-extrabold uppercase tracking-widest text-muted-foreground">Orders</th>
+                            <th className="px-8 py-4 text-[10px] font-extrabold uppercase tracking-widest text-muted-foreground">Catalog</th>
+                            <th className="px-8 py-4 text-[10px] font-extrabold uppercase tracking-widest text-muted-foreground">Settings</th>
+                            <th className="px-8 py-4 text-[10px] font-extrabold uppercase tracking-widest text-muted-foreground">Users</th>
+                            <th className="px-8 py-4 text-[10px] font-extrabold uppercase tracking-widest text-muted-foreground">Delivery</th>
+                            <th className="px-8 py-4 text-[10px] font-extrabold uppercase tracking-widest text-muted-foreground text-center">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-border/40">
+                          {customRoles.map((role, idx) => {
+                            const canEditThisRole =
+                              currentAdmin?.role === 'Super Admin' ||
+                              (currentAdmin?.role === 'Admin' && role.name !== 'Super Admin');
+
+                            return (
+                              <tr key={idx} className="hover:bg-[#faf8f5]/80 transition-colors group">
+                                <td className="px-8 py-5">
+                                  <div className="flex items-center gap-3">
+                                    <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-primary/20 to-[#c5a880]/20 flex items-center justify-center text-primary font-extrabold text-sm border border-primary/10">
+                                      {role.name.charAt(0)}
+                                    </div>
+                                    <div>
+                                      <p className="font-extrabold text-foreground text-sm">{role.name}</p>
+                                      {!canEditThisRole && (
+                                        <p className="text-[9px] text-muted-foreground/60 font-semibold uppercase tracking-wide mt-0.5">Read-only</p>
+                                      )}
+                                    </div>
+                                  </div>
+                                </td>
+                                {(['orders', 'catalog', 'settings', 'users', 'delivery'] as const).map((perm) => (
+                                  <td key={perm} className="px-8 py-5">
+                                    <button
+                                      onClick={() => canEditThisRole && handleUpdateRolePermission(role.name, perm as any, !role.permissions[perm])}
+                                      disabled={!canEditThisRole}
+                                      className={`inline-flex items-center justify-center h-8 w-8 rounded-lg transition-all cursor-pointer hover:scale-110 ${
+                                        role.permissions[perm]
+                                          ? 'bg-emerald-50 border border-emerald-200 text-emerald-600 hover:bg-emerald-100'
+                                          : 'bg-rose-50 border border-rose-200 text-rose-600 hover:bg-rose-100'
+                                      } ${!canEditThisRole ? 'cursor-not-allowed opacity-60' : ''}`}
+                                      title={canEditThisRole ? (role.permissions[perm] ? 'Revoke permission' : 'Grant permission') : 'Read-only'}
+                                    >
+                                      {role.permissions[perm] ? (
+                                        <CheckCircle2 className="h-4 w-4" />
+                                      ) : (
+                                        <X className="h-4 w-4" />
+                                      )}
+                                    </button>
+                                  </td>
+                                ))}
+                                <td className="px-8 py-5 text-center">
+                                  <div className="flex items-center justify-center gap-2">
+                                    <button
+                                      disabled={!canEditThisRole}
+                                      className="p-2 rounded-lg border border-border/50 bg-white hover:bg-primary/5 text-primary hover:border-primary/30 transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                                      title="Edit Permissions"
+                                    >
+                                      <Edit2 className="h-4 w-4" />
+                                    </button>
+                                    {canEditThisRole && role.name !== 'Super Admin' && (
+                                      <button
+                                        className="p-2 rounded-lg border border-rose-200 bg-white hover:bg-rose-50 text-rose-600 hover:border-rose-300 transition-all cursor-pointer"
+                                        title="Delete Role"
+                                      >
+                                        <Trash2 className="h-4 w-4" />
+                                      </button>
+                                    )}
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* Table Footer with Pagination */}
+                    <div className="px-8 py-4 border-t border-border/50 bg-[#faf8f6]/50 flex items-center justify-between">
+                      <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                        Showing {customRoles.length} of {customRoles.length} roles
+                      </p>
+                      <div className="flex items-center gap-2">
+                        <button className="px-3 py-1.5 rounded-lg border border-border/50 bg-white text-xs font-bold text-muted-foreground hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-all">
+                          Previous
+                        </button>
+                        <button className="px-3 py-1.5 rounded-lg border border-border/50 bg-white text-xs font-bold text-muted-foreground hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-all">
+                          Next
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Permission Details Panel */}
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {/* Permission Legend */}
+                    <div className="bg-white rounded-2xl border border-border/60 shadow-luxury p-6">
+                      <h4 className="font-display text-sm font-extrabold text-foreground mb-4 flex items-center gap-2">
+                        <ShieldCheck className="h-5 w-5 text-primary" />
+                        Permission Descriptions
+                      </h4>
+                      <div className="space-y-3">
+                        {[
+                          { key: 'orders', label: 'Orders Management', desc: 'View, transition, and manage customer orders' },
+                          { key: 'catalog', label: 'Catalog Management', desc: 'Add, edit, remove products and categories' },
+                          { key: 'settings', label: 'CMS & Settings', desc: 'Edit homepage content and site configuration' },
+                          { key: 'users', label: 'User Administration', desc: 'Create and manage admin user accounts' },
+                          { key: 'delivery', label: 'Delivery Configuration', desc: 'Set up delivery zones and pricing' },
+                        ].map(({ key, label, desc }) => (
+                          <div key={key} className="flex items-start gap-3 p-3 rounded-xl bg-[#faf8f5]/50 border border-border/30">
+                            <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary flex-shrink-0">
+                              {key === 'orders' && <FileText className="h-4 w-4" />}
+                              {key === 'catalog' && <ShoppingBag className="h-4 w-4" />}
+                              {key === 'settings' && <Settings className="h-4 w-4" />}
+                              {key === 'users' && <Users className="h-4 w-4" />}
+                              {key === 'delivery' && <MapPin className="h-4 w-4" />}
+                            </div>
+                            <div>
+                              <p className="font-extrabold text-foreground text-[11px] uppercase tracking-wide">{label}</p>
+                              <p className="font-semibold text-muted-foreground text-[10px] mt-0.5">{desc}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Create New Role Form */}
+                    <form onSubmit={handleCreateRole} className="bg-gradient-to-br from-white to-[#faf8f6] rounded-2xl border border-border/60 shadow-luxury p-6">
+                      <div className="flex items-center gap-2 mb-6">
+                        <div className="p-2.5 bg-primary/10 rounded-xl">
+                          <Plus className="h-5 w-5 text-primary" />
+                        </div>
+                        <div>
+                          <h4 className="font-display text-sm font-extrabold text-foreground">Create Custom Role</h4>
+                          <p className="text-[10px] text-muted-foreground font-semibold mt-0.5">Define a new role with specific permissions</p>
                         </div>
                       </div>
 
-                      <button
-                        type="submit"
-                        className="w-full rounded-xl bg-primary hover:bg-[#a34d2b] py-3.5 text-xs font-extrabold uppercase tracking-wider text-white shadow-md cursor-pointer transition-all active:scale-[0.98]"
-                      >
-                        Create Custom Role
-                      </button>
-                    </div>
-                  </form>
+                      <div className="space-y-5">
+                        {/* Role Name Input */}
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-extrabold uppercase text-muted-foreground tracking-widest">Role Title *</label>
+                          <input
+                            type="text"
+                            required
+                            value={newRoleName}
+                            onChange={(e) => setNewRoleName(e.target.value)}
+                            placeholder="e.g. Baker, Dispatch Rider"
+                            className="w-full border border-border/60 bg-white rounded-xl px-4 py-3 text-xs outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/10 font-semibold text-foreground transition-all placeholder:text-muted-foreground/40"
+                          />
+                        </div>
+
+                        {/* Permissions Grid */}
+                        <div className="space-y-3">
+                          <p className="text-[10px] font-extrabold uppercase text-muted-foreground tracking-widest">Grant Permissions</p>
+                          <div className="grid grid-cols-1 gap-2.5">
+                            {[
+                              { state: rolePermOrders,   setter: setRolePermOrders,   emoji: '📝', label: 'Orders Management',       desc: 'View & transition customer orders' },
+                              { state: rolePermCatalog,  setter: setRolePermCatalog,  emoji: '🎂', label: 'Catalog Management',      desc: 'Add, edit, and remove menu items' },
+                              { state: rolePermSettings, setter: setRolePermSettings, emoji: '⚙️', label: 'CMS & Site Settings',     desc: 'Edit homepage content & cover' },
+                              { state: rolePermUsers,    setter: setRolePermUsers,    emoji: '👤', label: 'User Administration',     desc: 'Create and manage admin accounts' },
+                              { state: rolePermDelivery, setter: setRolePermDelivery, emoji: '🚚', label: 'Delivery Zone Config',    desc: 'Set delivery areas and pricing' },
+                            ].map(({ state, setter, emoji, label, desc }) => (
+                              <label key={label} className={`flex items-center gap-3 p-3.5 rounded-xl border transition-all cursor-pointer select-none ${
+                                state ? 'border-primary/40 bg-gradient-to-r from-primary/10 to-primary/5 shadow-sm' : 'border-border/40 bg-white hover:border-primary/30 hover:bg-[#faf8f5]'
+                              }`}>
+                                <input
+                                  type="checkbox"
+                                  checked={state}
+                                  onChange={(e) => setter(e.target.checked)}
+                                  className="rounded-lg border-border/60 text-primary focus:ring-primary/50 h-4 w-4 flex-shrink-0"
+                                />
+                                <span className="text-lg leading-none">{emoji}</span>
+                                <div className="flex-1">
+                                  <p className="font-extrabold text-foreground text-[11px] uppercase tracking-wide">{label}</p>
+                                  <p className="font-semibold text-muted-foreground text-[10px] mt-0.5">{desc}</p>
+                                </div>
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+
+                        <button
+                          type="submit"
+                          className="w-full rounded-xl bg-gradient-to-r from-primary to-[#a34d2b] hover:from-[#a34d2b] hover:to-primary py-3.5 text-xs font-extrabold uppercase tracking-wider text-white shadow-lg hover:shadow-xl transition-all cursor-pointer active:scale-[0.98] flex items-center justify-center gap-2"
+                        >
+                          <Plus className="h-4 w-4" />
+                          <span>Create Custom Role</span>
+                        </button>
+                      </div>
+                    </form>
+                  </div>
 
                 </div>
               )}

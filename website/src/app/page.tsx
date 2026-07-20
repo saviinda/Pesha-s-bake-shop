@@ -403,42 +403,96 @@ export default function Home() {
         whileInView={{ opacity: 1, y: 0 }}
         viewport={{ once: true, margin: "-100px" }}
         transition={{ duration: 0.8 }}
-        className="py-20 sm:py-28 bg-white relative"
+        className="py-24 sm:py-32 bg-gradient-to-b from-white via-[#faf8f5] to-white relative overflow-hidden"
       >
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="text-center max-w-2xl mx-auto mb-16 space-y-3">
-            <h2 className="font-display text-3xl sm:text-4xl font-light text-foreground">Browse Our Collections</h2>
-            <div className="h-[1px] w-24 bg-[#c5a880] mx-auto" />
-            <p className="text-[10px] text-muted-foreground font-extrabold font-sans uppercase tracking-widest">
+        {/* Ambient background effects */}
+        <div className="absolute top-0 left-1/4 w-96 h-96 bg-[#c5a880]/5 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-[#8c3a1b]/5 rounded-full blur-3xl pointer-events-none" />
+
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 relative z-10">
+          <div className="text-center max-w-2xl mx-auto mb-16 space-y-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              whileInView={{ opacity: 1, scale: 1 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.6 }}
+              className="inline-flex items-center gap-2 rounded-full border border-luxury-gold/30 bg-[#c5a880]/10 px-5 py-2 text-[10px] font-extrabold text-[#c5a880] tracking-widest uppercase shadow-sm"
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              <span>Curated Collections</span>
+            </motion.div>
+            <h2 className="font-display text-4xl sm:text-5xl font-light text-foreground">Browse Our Collections</h2>
+            <div className="h-[1px] w-32 bg-gradient-to-r from-transparent via-[#c5a880] to-transparent mx-auto" />
+            <p className="text-xs text-muted-foreground font-extrabold font-sans uppercase tracking-widest max-w-md mx-auto leading-relaxed">
               Bespoke sweets handcrafted to make celebrations timeless
             </p>
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6 lg:gap-8">
             {loading ? (
               Array.from({ length: 5 }).map((_, i) => (
-                <div key={i} className="animate-pulse bg-muted rounded-none aspect-square" />
+                <div key={i} className="animate-pulse bg-muted rounded-3xl aspect-[4/5]" />
               ))
             ) : (
-              categories.map((category) => (
+              categories.map((category, index) => (
                 <motion.div
                   key={category.id}
-                  whileHover={{ y: -6 }}
-                  className="group relative overflow-hidden rounded-none border border-border/60 bg-[#faf8f5] hover:border-[#c5a880]/60 shadow-sm hover:shadow-luxury transition-all duration-300"
+                  initial={{ opacity: 0, y: 20 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ duration: 0.5, delay: index * 0.1 }}
+                  whileHover={{ y: -12, scale: 1.02 }}
+                  className="group relative"
                 >
-                  <Link href={`/shop?category=${category.slug}`} className="flex flex-col h-full">
-                    <div className="aspect-square w-full overflow-hidden bg-muted relative">
-                      <img
-                        src={category.image_url}
-                        alt={category.name}
-                        className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
-                      />
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-                    </div>
-                    <div className="p-4 text-center flex-1 flex flex-col justify-center">
-                      <h3 className="font-display text-sm sm:text-base font-bold text-foreground group-hover:text-primary transition-colors leading-tight">
-                        {category.name}
-                      </h3>
+                  <Link href={`/shop?category=${category.slug}`} className="block">
+                    {/* Card Container */}
+                    <div className="relative overflow-hidden rounded-3xl bg-white shadow-lg hover:shadow-2xl transition-all duration-500 border border-border/40 hover:border-[#c5a880]/40">
+                      
+                      {/* Image Container with Premium Effects */}
+                      <div className="aspect-[4/5] w-full overflow-hidden relative bg-muted">
+                        {/* Gradient Overlay */}
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-60 z-10" />
+                        
+                        {/* Image with Zoom Effect */}
+                        <motion.img
+                          src={category.image_url}
+                          alt={category.name}
+                          className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-110"
+                          whileHover={{ scale: 1.1 }}
+                          transition={{ duration: 0.7 }}
+                        />
+                        
+                        {/* Glow Effect on Hover */}
+                        <div className="absolute inset-0 bg-gradient-to-t from-[#c5a880]/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 z-10" />
+                        
+                        {/* Shine Effect */}
+                        <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 z-10" />
+                        
+                        {/* Category Badge */}
+                        <div className="absolute top-4 left-4 z-20">
+                          <div className="bg-white/95 backdrop-blur-sm rounded-2xl px-4 py-2 shadow-lg border border-[#c5a880]/20">
+                            <p className="font-display text-[10px] font-extrabold text-[#8c3a1b] uppercase tracking-wider">
+                              {category.name}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Card Content Overlay */}
+                      <div className="absolute bottom-0 left-0 right-0 p-6 z-20">
+                        <div className="transform translate-y-2 group-hover:translate-y-0 transition-transform duration-500">
+                          <h3 className="font-display text-lg sm:text-xl font-bold text-white mb-2 leading-tight drop-shadow-lg">
+                            {category.name}
+                          </h3>
+                          <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-500">
+                            <span className="text-white/90 text-xs font-semibold">Explore Collection</span>
+                            <ArrowRight className="h-4 w-4 text-[#c5a880] group-hover:translate-x-1 transition-transform duration-300" />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Hover Border Glow */}
+                      <div className="absolute inset-0 rounded-3xl border-2 border-transparent group-hover:border-[#c5a880]/30 transition-all duration-500 pointer-events-none z-30" />
                     </div>
                   </Link>
                 </motion.div>
