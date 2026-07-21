@@ -208,12 +208,13 @@ function ShopContent() {
                 <div className="mt-4 flex items-center justify-between">
                   <span className="text-base font-extrabold text-primary">LKR {product.base_price.toLocaleString()}</span>
                   
-                  <Link
-                    href={`/shop/${product.slug}`}
-                    className="inline-flex items-center justify-center bg-primary/10 px-4 py-2 text-xs font-bold text-primary hover:bg-primary hover:text-white transition-colors rounded-none"
+                  <button
+                    onClick={() => handleAddToCart(product)}
+                    className="inline-flex items-center justify-center gap-1.5 bg-primary px-4 py-2 text-xs font-bold text-white hover:bg-secondary transition-colors rounded-none"
                   >
-                    View Details
-                  </Link>
+                    <ShoppingBag className="h-3.5 w-3.5" />
+                    <span>Add to Cart</span>
+                  </button>
                 </div>
               </div>
             </motion.div>
