@@ -101,8 +101,6 @@ export default function Checkout() {
   // Selected Zone Info
   const selectedZone = zones.find(z => z.id === deliveryZoneId);
   const deliveryFee = selectedZone ? Number(selectedZone.fee) : 0;
-  const minOrderValue = selectedZone ? Number(selectedZone.min_order_value) : 0;
-  const isMinOrderSatisfied = cartSubtotal >= minOrderValue;
   const grandTotal = cartSubtotal + deliveryFee;
 
   // Handle Receipt Upload conversion to storage url / fallback base64
@@ -143,13 +141,6 @@ export default function Checkout() {
     if (!firstName || !phone || !line1 || !city || !deliveryZoneId || !deliveryDate) {
       setFormError('Please fill in all required fields marked with *');
       showToast('warning', 'Please fill in all required fields marked with *');
-      return;
-    }
-
-    if (!isMinOrderSatisfied) {
-      const errMsg = `Minimum order value for ${selectedZone?.name} is LKR ${minOrderValue.toLocaleString()}`;
-      setFormError(errMsg);
-      showToast('error', errMsg);
       return;
     }
 
@@ -526,7 +517,7 @@ export default function Checkout() {
               {/* Submit CTA */}
               <button
                 type="submit"
-                disabled={submitting || !isMinOrderSatisfied}
+                disabled={submitting}
                 className="w-full rounded-full bg-primary py-4 text-sm font-bold text-white shadow-lg shadow-primary/20 hover:bg-secondary transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 font-sans"
               >
                 {submitting ? (

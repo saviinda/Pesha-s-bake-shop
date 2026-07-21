@@ -616,30 +616,67 @@ export default function AdminDashboard() {
 
     const html = `<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/></head>
-<body style="margin:0;padding:0;background:#fdf8f4;font-family:'Segoe UI',Arial,sans-serif;">
-<table width="100%" cellpadding="0" cellspacing="0" style="background:#fdf8f4;padding:40px 0;">
+<body style="margin:0;padding:0;background:#f5f0ea;font-family:'Segoe UI',Arial,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f0ea;padding:30px 20px;">
 <tr><td align="center">
-<table width="600" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:20px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.07);max-width:600px;width:100%;">
-<tr><td style="background:linear-gradient(135deg,#b5673d 0%,#d4845a 100%);padding:40px;text-align:center;">
-  <p style="margin:0 0 8px;font-size:13px;color:rgba(255,255,255,0.75);letter-spacing:3px;text-transform:uppercase;font-weight:600;">Order Update</p>
-  <h1 style="margin:0;color:#ffffff;font-size:26px;font-weight:800;">${info.emoji} ${info.headline}</h1>
-</td></tr>
-<tr><td style="padding:40px;">
-  <p style="margin:0 0 20px;color:#7a5c4a;font-size:15px;line-height:1.7;">${info.body}</p>
-  <div style="background:#fdf8f4;border-left:4px solid ${info.color};border-radius:8px;padding:20px;margin:24px 0;">
-    <p style="margin:0 0 6px;font-size:12px;color:#a0856d;font-weight:700;text-transform:uppercase;letter-spacing:1px;">Order Summary</p>
-    <p style="margin:4px 0;font-size:14px;color:#5c3d2e;"><strong>Order ID:</strong> #${orderId}</p>
-    <p style="margin:4px 0;font-size:14px;color:#5c3d2e;"><strong>Total Amount:</strong> ${total}</p>
-    <p style="margin:4px 0;font-size:14px;color:#5c3d2e;"><strong>Delivery Date:</strong> ${deliveryDate}</p>
-    <p style="margin:4px 0;font-size:14px;color:#5c3d2e;"><strong>Status:</strong> <span style="color:${info.color};font-weight:700;">${status.replace(/_/g, ' ').toUpperCase()}</span></p>
-  </div>
-  <div style="text-align:center;margin-top:28px;">
-    <a href="https://peshasbakeshop.com/track?orderId=${orderId}" style="display:inline-block;background:linear-gradient(135deg,#b5673d,#d4845a);color:#ffffff;text-decoration:none;padding:14px 32px;border-radius:50px;font-weight:700;font-size:14px;">Track Your Order →</a>
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:24px;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,0.12);max-width:600px;width:100%;">
+<!-- Header -->
+<tr><td style="background:linear-gradient(135deg,#b5673d 0%,#d4845a 50%,#e8a87c 100%);padding:50px 40px;text-align:center;position:relative;">
+  <div style="font-size:48px;margin-bottom:16px;line-height:1;">${info.emoji}</div>
+  <p style="margin:0 0 12px;font-size:11px;color:rgba(255,255,255,0.85);letter-spacing:4px;text-transform:uppercase;font-weight:700;">Order Status Update</p>
+  <h1 style="margin:0;color:#ffffff;font-size:28px;font-weight:800;line-height:1.3;text-shadow:0 2px 8px rgba(0,0,0,0.15);">${info.headline}</h1>
+  <div style="margin-top:20px;display:inline-block;background:rgba(255,255,255,0.2);backdrop-filter:blur(10px);padding:8px 24px;border-radius:30px;border:1px solid rgba(255,255,255,0.3);">
+    <span style="color:#ffffff;font-size:13px;font-weight:700;letter-spacing:1px;">#${orderId}</span>
   </div>
 </td></tr>
-<tr><td style="background:#fdf8f4;padding:24px 40px;text-align:center;border-top:1px solid #f0e8e0;">
-  <p style="margin:0;font-size:12px;color:#a0856d;">Questions? Reply to this email or contact Pesha's Bake Shop.</p>
-  <p style="margin:8px 0 0;font-size:11px;color:#c4a992;">© ${new Date().getFullYear()} Pesha's Bake Shop. Made with 💛 in Sri Lanka.</p>
+<!-- Content -->
+<tr><td style="padding:45px 40px;">
+  <p style="margin:0 0 30px;color:#5c3d2e;font-size:16px;line-height:1.8;font-weight:400;">${info.body}</p>
+  
+  <!-- Status Badge -->
+  <div style="text-align:center;margin:30px 0;">
+    <div style="display:inline-block;background:${info.color};color:#ffffff;padding:12px 32px;border-radius:50px;font-size:14px;font-weight:800;letter-spacing:2px;text-transform:uppercase;box-shadow:0 4px 15px ${info.color}40;">
+      ${status.replace(/_/g, ' ').toUpperCase()}
+    </div>
+  </div>
+
+  <!-- Order Details Card -->
+  <div style="background:#faf8f6;border-radius:16px;padding:28px;margin:30px 0;border:1px solid #efe8e0;">
+    <h3 style="margin:0 0 20px;font-size:14px;color:#b5673d;font-weight:800;text-transform:uppercase;letter-spacing:1.5px;border-bottom:2px solid #efe8e0;padding-bottom:12px;">Order Details</h3>
+    <table width="100%" cellpadding="0" cellspacing="0" style="font-size:15px;">
+      <tr>
+        <td style="padding:12px 0;color:#7a5c4a;font-weight:600;border-bottom:1px solid #efe8e0;">Order ID</td>
+        <td style="padding:12px 0;color:#5c3d2e;font-weight:700;text-align:right;border-bottom:1px solid #efe8e0;">#${orderId}</td>
+      </tr>
+      <tr>
+        <td style="padding:12px 0;color:#7a5c4a;font-weight:600;border-bottom:1px solid #efe8e0;">Total Amount</td>
+        <td style="padding:12px 0;color:#b5673d;font-weight:800;text-align:right;border-bottom:1px solid #efe8e0;">${total}</td>
+      </tr>
+      <tr>
+        <td style="padding:12px 0;color:#7a5c4a;font-weight:600;border-bottom:1px solid #efe8e0;">Delivery Date</td>
+        <td style="padding:12px 0;color:#5c3d2e;font-weight:700;text-align:right;border-bottom:1px solid #efe8e0;">${deliveryDate}</td>
+      </tr>
+      <tr>
+        <td style="padding:12px 0;color:#7a5c4a;font-weight:600;">Customer</td>
+        <td style="padding:12px 0;color:#5c3d2e;font-weight:700;text-align:right;">${customerName}</td>
+      </tr>
+    </table>
+  </div>
+
+  <!-- CTA Button -->
+  <div style="text-align:center;margin:35px 0;">
+    <a href="https://peshasbakeshop.com/track?orderId=${orderId}" style="display:inline-block;background:linear-gradient(135deg,#b5673d,#d4845a);color:#ffffff;text-decoration:none;padding:16px 40px;border-radius:50px;font-weight:700;font-size:15px;box-shadow:0 6px 20px rgba(181,103,61,0.3);transition:transform 0.2s;">Track Your Order →</a>
+  </div>
+</td></tr>
+<!-- Footer -->
+<tr><td style="background:#faf8f6;padding:35px 40px;text-align:center;border-top:3px solid #b5673d;">
+  <div style="margin-bottom:20px;">
+    <span style="font-size:32px;">🎂</span>
+  </div>
+  <p style="margin:0 0 8px;font-size:14px;color:#b5673d;font-weight:700;">Pesha's Bake Shop</p>
+  <p style="margin:0 0 20px;font-size:12px;color:#7a5c4a;">Handcrafted sweetness delivered with love</p>
+  <p style="margin:0;font-size:11px;color:#a0856d;">Questions? Contact us at peshasbakes@gmail.com</p>
+  <p style="margin:12px 0 0;font-size:10px;color:#c4a992;">© ${new Date().getFullYear()} Pesha's Bake Shop. Made with 💛 in Sri Lanka.</p>
 </td></tr>
 </table></td></tr></table>
 </body></html>`;
