@@ -95,7 +95,8 @@ import {
   AdminMetrics,
   LeadTimeConflict,
   SiteSettings,
-  ProductVariant
+  ProductVariant,
+  deleteCustomer
 } from '@/lib/data';
 
 type RoleName = 'Super Admin' | 'Admin' | 'Staff' | string;
@@ -1037,6 +1038,20 @@ export default function AdminDashboard() {
         await loadAdminData();
       } else {
         showToast('error', 'Failed to delete category.');
+      }
+    }, true);
+  };
+
+  // Delete customer wrapper
+  const handleDeleteCustomer = (customerId: string) => {
+    if (!getPermission('users')) return;
+    customConfirm('Delete Customer', 'Are you sure you want to delete this customer from the registry? This action cannot be undone.', async () => {
+      const res = await deleteCustomer(customerId);
+      if (res) {
+        showToast('success', 'Customer deleted successfully.');
+        await loadAdminData();
+      } else {
+        showToast('error', 'Failed to delete customer.');
       }
     }, true);
   };
@@ -2301,12 +2316,13 @@ export default function AdminDashboard() {
                         <th className="p-4 sticky top-0 bg-[#faf8f6] z-10">Phone</th>
                         <th className="p-4 sticky top-0 bg-[#faf8f6] z-10">Verified Status</th>
                         <th className="p-4 sticky top-0 bg-[#faf8f6] z-10">Registered On</th>
+                        <th className="p-4 sticky top-0 bg-[#faf8f6] z-10 text-center">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border/60 font-medium text-foreground">
                       {paginatedCustomers.length === 0 ? (
                         <tr>
-                          <td colSpan={5} className="p-12 text-center text-muted-foreground font-bold text-sm">No customers found in registry.</td>
+                          <td colSpan={6} className="p-12 text-center text-muted-foreground font-bold text-sm">No customers found in registry.</td>
                         </tr>
                       ) : (
                         paginatedCustomers.map((cust) => (
@@ -2334,6 +2350,15 @@ export default function AdminDashboard() {
                             </td>
                             <td className="p-4 text-muted-foreground font-semibold">
                               {cust.createdAt ? new Date(cust.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
+                            </td>
+                            <td className="p-4 text-center">
+                              <button
+                                onClick={() => handleDeleteCustomer(cust.id)}
+                                className="rounded-lg bg-rose-50 hover:bg-rose-100 border border-rose-200 px-3 py-1.5 text-[10px] font-extrabold text-rose-700 uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1.5 mx-auto"
+                              >
+                                <Trash2 className="h-3 w-3" />
+                                <span>Delete</span>
+                              </button>
                             </td>
                           </tr>
                         ))

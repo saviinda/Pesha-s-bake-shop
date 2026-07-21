@@ -902,6 +902,28 @@ export const deleteDeliveryZone = async (zoneId: string): Promise<boolean> => {
   return true;
 };
 
+export const deleteCustomer = async (customerId: string): Promise<boolean> => {
+  if (isSupabaseConfigured()) {
+    try {
+      if (isValidUUID(customerId)) {
+        const { error } = await supabase
+          .from('customers')
+          .delete()
+          .eq('id', customerId);
+        if (error) throw error;
+      }
+    } catch (e) {
+      console.error('Failed to delete customer in Supabase:', e);
+      return false;
+    }
+  }
+
+  const localCusts = getLocalStorage('peshas_local_customers', []);
+  const updated = localCusts.filter((c: any) => c.id !== customerId);
+  setLocalStorage('peshas_local_customers', updated);
+  return true;
+};
+
 
 export const getAdminSiteSettings = async (): Promise<SiteSettings> => {
   const defaults: SiteSettings = {
