@@ -1781,7 +1781,8 @@ export default function AdminDashboard() {
                         <th className="p-4 sticky top-0 bg-[#faf8f6] z-10">Order ID</th>
                         <th className="p-4 sticky top-0 bg-[#faf8f6] z-10">Customer Details</th>
                         <th className="p-4 sticky top-0 bg-[#faf8f6] z-10">Items Ordered</th>
-                        <th className="p-4 sticky top-0 bg-[#faf8f6] z-10">Delivery details</th>
+                        <th className="p-4 sticky top-0 bg-[#faf8f6] z-10">Ordered Date/Time</th>
+                        <th className="p-4 sticky top-0 bg-[#faf8f6] z-10">Delivery Date/Time</th>
                         <th className="p-4 sticky top-0 bg-[#faf8f6] z-10">Payment Method</th>
                         <th className="p-4 sticky top-0 bg-[#faf8f6] z-10">Receipt</th>
                         <th className="p-4 sticky top-0 bg-[#faf8f6] z-10">Total Price</th>
@@ -1829,8 +1830,13 @@ export default function AdminDashboard() {
                               )}
                             </td>
                             <td className="p-4 space-y-1">
-                              <p className="font-bold">{order.deliveryDate} ({order.deliveryTimeSlot.split(' ')[0]} slot)</p>
-                              <p className="text-muted-foreground font-semibold leading-tight">{order.address.line1}, {order.address.city}</p>
+                              <p className="font-bold text-foreground">{new Date(order.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</p>
+                              <p className="text-muted-foreground font-semibold">{new Date(order.createdAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}</p>
+                            </td>
+                            <td className="p-4 space-y-1">
+                              <p className="font-bold text-foreground">{order.deliveryDate}</p>
+                              <p className="text-muted-foreground font-semibold">{order.deliveryTimeSlot}</p>
+                              <p className="text-[10px] text-muted-foreground leading-tight">{order.address.line1}, {order.address.city}</p>
                             </td>
                             <td className="p-4 capitalize font-semibold">{order.paymentMethod === 'transfer' ? 'Bank Transfer' : 'COD'}</td>
                             <td className="p-4">

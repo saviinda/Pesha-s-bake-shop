@@ -31,3 +31,8 @@ create policy "Allow public update on contact_messages"
     on public.contact_messages for update
     using (true)
     with check (true);
+
+-- Allow public delete (for admin panel)
+create policy "Allow public delete on contact_messages"
+    on public.contact_messages for delete
+    using (true);
