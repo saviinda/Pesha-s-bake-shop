@@ -96,7 +96,11 @@ import {
   LeadTimeConflict,
   SiteSettings,
   ProductVariant,
-  deleteCustomer
+  deleteCustomer,
+  getContactMessages,
+  markMessageAsRead,
+  deleteContactMessage,
+  ContactMessage
 } from '@/lib/data';
 
 type RoleName = 'Super Admin' | 'Admin' | 'Staff' | string;
@@ -126,7 +130,7 @@ const SEEDED_ADMINS = [
   { email: 'staff@pesha.lk', password: 'staff123', name: 'Kitchen Staff', role: 'Staff' }
 ];
 
-type Tab = 'dashboard' | 'orders' | 'categories' | 'catalog' | 'customers' | 'settings' | 'delivery' | 'users';
+type Tab = 'dashboard' | 'orders' | 'categories' | 'catalog' | 'customers' | 'settings' | 'delivery' | 'users' | 'messages';
 
 export default function AdminDashboard() {
   const { showToast } = useToast();
@@ -173,6 +177,9 @@ export default function AdminDashboard() {
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const [contactMessages, setContactMessages] = useState<ContactMessage[]>([]);
+  const [selectedMessage, setSelectedMessage] = useState<ContactMessage | null>(null);
+  const [isMessageModalOpen, setIsMessageModalOpen] = useState(false);
   const [customerSearch, setCustomerSearch] = useState('');
   const [zones, setZones] = useState<DeliveryZone[]>([]);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
@@ -293,17 +300,21 @@ export default function AdminDashboard() {
       );
     }
 
-    result.sort((a, b) => {
-      let comparison = 0;
-      if (orderSortBy === 'id') {
-        comparison = a.id.localeCompare(b.id);
-      } else if (orderSortBy === 'total') {
-        comparison = a.total - b.total;
-      } else if (orderSortBy === 'date') {
-        comparison = a.deliveryDate.localeCompare(b.deliveryDate);
-      }
-      return orderSortOrder === 'asc' ? comparison : -comparison;
-    });
+    // Default sort by creation date (most recent first)
+    result.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+    // Then apply user's custom sort if specified
+    if (orderSortBy !== 'id') {
+      result.sort((a, b) => {
+        let comparison = 0;
+        if (orderSortBy === 'total') {
+          comparison = a.total - b.total;
+        } else if (orderSortBy === 'date') {
+          comparison = a.deliveryDate.localeCompare(b.deliveryDate);
+        }
+        return orderSortOrder === 'asc' ? comparison : -comparison;
+      });
+    }
 
     return result;
   }, [orders, orderFilter, orderSearch, orderSortBy, orderSortOrder]);
@@ -411,13 +422,14 @@ export default function AdminDashboard() {
     if (!silent) setIsRefreshing(true);
     try {
       // Fetch primary data in parallel
-      const [ords, prods, cats, custs, zns, settings] = await Promise.all([
+      const [ords, prods, cats, custs, zns, settings, msgs] = await Promise.all([
         getAdminOrders(),
         getAdminProducts(),
         getAdminCategories(),
         getAdminCustomers(),
         getAdminDeliveryZones(),
-        getAdminSiteSettings()
+        getAdminSiteSettings(),
+        getContactMessages()
       ]);
 
       // Calculate metrics and conflicts using preloaded data
@@ -464,6 +476,7 @@ export default function AdminDashboard() {
       setMetrics(metrs);
       setConflicts(confs);
       setSiteSettings(settings);
+      setContactMessages(msgs);
       setLastUpdated(new Date());
     } catch (e) {
       console.error('Failed to load admin data:', e);
@@ -1308,6 +1321,21 @@ export default function AdminDashboard() {
                 <Users className="h-4 w-4" />
                 <span>Customer Registry</span>
               </button>
+
+              <button
+                onClick={() => { setActiveTab('messages'); setIsMobileSidebarOpen(false); }}
+                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${
+                  activeTab === 'messages' ? 'bg-accent text-[#130907] shadow-[0_4px_15px_rgba(197,168,128,0.25)]' : 'text-white/60 hover:bg-white/5 hover:text-white'
+                }`}
+              >
+                <Mail className="h-4 w-4" />
+                <span>Contact Messages</span>
+                {contactMessages.filter(m => !m.read).length > 0 && (
+                  <span className="ml-auto h-5 w-5 bg-rose-600 rounded-full flex items-center justify-center text-[10px] font-bold text-white animate-pulse">
+                    {contactMessages.filter(m => !m.read).length}
+                  </span>
+                )}
+              </button>
             </div>
 
             {/* Section 2 */}
@@ -1419,6 +1447,7 @@ export default function AdminDashboard() {
               {activeTab === 'users' && 'User Management & Custom Roles'}
               {activeTab === 'settings' && 'Website Cover & CMS Editor'}
               {activeTab === 'delivery' && 'Delivery Zones & Fees'}
+              {activeTab === 'messages' && 'Contact Messages'}
             </h2>
           </div>
         </header>
@@ -3449,8 +3478,204 @@ export default function AdminDashboard() {
             </div>
           )}
 
+          {/* TAB 8: CONTACT MESSAGES */}
+          {activeTab === 'messages' && (
+            <div className="space-y-6 animate-fadeIn text-xs">
+              <div className="flex justify-between items-center border-b border-border/45 pb-4">
+                <div>
+                  <h3 className="font-display text-base font-extrabold text-foreground">Contact Messages</h3>
+                  <p className="text-xs text-muted-foreground font-semibold">View and manage messages from the website contact form.</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-bold text-muted-foreground">
+                    {contactMessages.filter(m => !m.read).length} unread
+                  </span>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-[2rem] border border-border overflow-hidden shadow-luxury">
+                <div className="overflow-x-auto overflow-y-auto max-h-[600px] relative scrollbar-thin">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="sticky top-0 bg-[#faf8f6] border-b border-border uppercase font-bold text-foreground text-[9px] tracking-wider z-10 shadow-[0_1px_0_rgba(0,0,0,0.05)]">
+                        <th className="p-4 sticky top-0 bg-[#faf8f6] z-10">Status</th>
+                        <th className="p-4 sticky top-0 bg-[#faf8f6] z-10">Name</th>
+                        <th className="p-4 sticky top-0 bg-[#faf8f6] z-10">Email</th>
+                        <th className="p-4 sticky top-0 bg-[#faf8f6] z-10">Phone</th>
+                        <th className="p-4 sticky top-0 bg-[#faf8f6] z-10">Message</th>
+                        <th className="p-4 sticky top-0 bg-[#faf8f6] z-10">Date</th>
+                        <th className="p-4 text-center sticky top-0 bg-[#faf8f6] z-10">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border/60 font-medium text-foreground">
+                      {contactMessages.length === 0 ? (
+                        <tr>
+                          <td colSpan={7} className="p-12 text-center text-muted-foreground font-bold text-sm">No messages found.</td>
+                        </tr>
+                      ) : (
+                        contactMessages.map((msg) => (
+                          <tr 
+                            key={msg.id} 
+                            className={`hover:bg-[#faf8f5]/70 transition-colors cursor-pointer ${!msg.read ? 'bg-blue-50/30' : ''}`}
+                            onClick={() => {
+                              setSelectedMessage(msg);
+                              setIsMessageModalOpen(true);
+                              if (!msg.read) {
+                                markMessageAsRead(msg.id);
+                                loadAdminData(true);
+                              }
+                            }}
+                          >
+                            <td className="p-4">
+                              {!msg.read ? (
+                                <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-100 border border-blue-200 px-3 py-1 text-[10px] font-bold text-blue-700 uppercase tracking-wider">
+                                  New
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1.5 rounded-full bg-gray-100 border border-gray-200 px-3 py-1 text-[10px] font-bold text-gray-700 uppercase tracking-wider">
+                                  Read
+                                </span>
+                              )}
+                            </td>
+                            <td className="p-4 font-bold text-foreground">{msg.name}</td>
+                            <td className="p-4 text-muted-foreground">{msg.email}</td>
+                            <td className="p-4 text-muted-foreground">{msg.phone || '-'}</td>
+                            <td className="p-4 max-w-xs truncate text-muted-foreground">{msg.message}</td>
+                            <td className="p-4 text-muted-foreground">
+                              {new Date(msg.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                            </td>
+                            <td className="p-4 text-center">
+                              <div className="flex items-center justify-center gap-2">
+                                {!msg.read && (
+                                  <button
+                                    onClick={() => {
+                                      markMessageAsRead(msg.id);
+                                      loadAdminData(true);
+                                    }}
+                                    className="text-blue-600 hover:text-blue-800 transition-colors"
+                                    title="Mark as Read"
+                                  >
+                                    <CheckCircle2 className="h-4 w-4" />
+                                  </button>
+                                )}
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    customConfirm('Delete Message', 'Are you sure you want to delete this message?', async () => {
+                                      const success = await deleteContactMessage(msg.id);
+                                      if (success) {
+                                        showToast('success', 'Message deleted successfully.');
+                                        loadAdminData(true);
+                                      } else {
+                                        showToast('error', 'Failed to delete message.');
+                                      }
+                                    }, true);
+                                  }}
+                                  className="text-rose-500 hover:text-rose-700 transition-colors"
+                                  title="Delete Message"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
         </div>
       </main>
+
+      {/* CONTACT MESSAGE VIEW MODAL */}
+      {isMessageModalOpen && selectedMessage && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-[2rem] border border-border w-full max-w-2xl p-6 sm:p-8 space-y-6 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-border/60 pb-4">
+              <h3 className="font-display text-base font-extrabold text-foreground">Contact Message Details</h3>
+              <button
+                onClick={() => {
+                  setIsMessageModalOpen(false);
+                  setSelectedMessage(null);
+                }}
+                className="text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Name</label>
+                  <p className="font-semibold text-foreground mt-1">{selectedMessage.name}</p>
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Email</label>
+                  <p className="font-semibold text-foreground mt-1">{selectedMessage.email}</p>
+                </div>
+              </div>
+              
+              {selectedMessage.phone && (
+                <div>
+                  <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Phone</label>
+                  <p className="font-semibold text-foreground mt-1">{selectedMessage.phone}</p>
+                </div>
+              )}
+              
+              <div>
+                <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Message</label>
+                <p className="text-foreground mt-1 whitespace-pre-wrap">{selectedMessage.message}</p>
+              </div>
+              
+              <div>
+                <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Received</label>
+                <p className="text-muted-foreground mt-1">
+                  {new Date(selectedMessage.createdAt).toLocaleString('en-GB', { 
+                    day: '2-digit', 
+                    month: 'short', 
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                  })}
+                </p>
+              </div>
+            </div>
+            
+            <div className="flex justify-end gap-3 pt-4 border-t border-border/60">
+              <button
+                onClick={() => {
+                  setIsMessageModalOpen(false);
+                  setSelectedMessage(null);
+                }}
+                className="px-6 py-2.5 rounded-xl bg-muted hover:bg-muted/80 font-semibold text-foreground transition-colors"
+              >
+                Close
+              </button>
+              <button
+                onClick={async () => {
+                  const success = await deleteContactMessage(selectedMessage.id);
+                  if (success) {
+                    showToast('success', 'Message deleted successfully.');
+                    loadAdminData(true);
+                    setIsMessageModalOpen(false);
+                    setSelectedMessage(null);
+                  } else {
+                    showToast('error', 'Failed to delete message.');
+                  }
+                }}
+                className="px-6 py-2.5 rounded-xl bg-rose-500 hover:bg-rose-600 font-semibold text-white transition-colors"
+              >
+                Delete Message
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* MODAL 1: PRODUCT SKU ADD/EDIT */}
       {isProductModalOpen && (

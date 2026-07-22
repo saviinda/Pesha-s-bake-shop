@@ -16,17 +16,32 @@ export default function Contact() {
   const [submitting, setSubmitting] = useState(false);
   const [expandedFaq, setExpandedFaq] = useState<number | null>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
-    setTimeout(() => {
+    
+    try {
+      const response = await fetch('/api/contact-message', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, email, phone, message })
+      });
+      
+      if (response.ok) {
+        setSubmitting(false);
+        setSubmitted(true);
+        setName('');
+        setEmail('');
+        setPhone('');
+        setMessage('');
+      } else {
+        throw new Error('Failed to send message');
+      }
+    } catch (error) {
+      console.error('Error sending message:', error);
       setSubmitting(false);
-      setSubmitted(true);
-      setName('');
-      setEmail('');
-      setPhone('');
-      setMessage('');
-    }, 1200);
+      alert('Failed to send message. Please try again.');
+    }
   };
 
   const faqs = [
@@ -428,44 +443,6 @@ export default function Contact() {
               >
                 <MessageCircle className="h-4 w-4" />
                 <span>Custom Order</span>
-              </a>
-            </div>
-          </motion.div>
-        </div>
-      </section>
-
-      {/* Social Media Section */}
-      <section className="py-16 bg-white">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 text-center">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.6 }}
-            className="space-y-6"
-          >
-            <h3 className="font-display text-2xl font-light text-foreground">Follow Us on Social Media</h3>
-            <p className="text-sm text-muted-foreground font-semibold">
-              Stay updated with our latest creations and special offers
-            </p>
-            <div className="flex items-center justify-center gap-4">
-              <a
-                href="#"
-                className="h-14 w-14 rounded-full bg-[#faf8f6] hover:bg-primary hover:text-white text-foreground border border-border/60 flex items-center justify-center transition-all duration-300 hover:scale-110 cursor-pointer shadow-lg hover:shadow-xl"
-              >
-                <Share2 className="h-6 w-6" />
-              </a>
-              <a
-                href="#"
-                className="h-14 w-14 rounded-full bg-[#faf8f6] hover:bg-primary hover:text-white text-foreground border border-border/60 flex items-center justify-center transition-all duration-300 hover:scale-110 cursor-pointer shadow-lg hover:shadow-xl"
-              >
-                <Share2 className="h-6 w-6" />
-              </a>
-              <a
-                href="#"
-                className="h-14 w-14 rounded-full bg-[#faf8f6] hover:bg-primary hover:text-white text-foreground border border-border/60 flex items-center justify-center transition-all duration-300 hover:scale-110 cursor-pointer shadow-lg hover:shadow-xl"
-              >
-                <Share2 className="h-6 w-6" />
               </a>
             </div>
           </motion.div>

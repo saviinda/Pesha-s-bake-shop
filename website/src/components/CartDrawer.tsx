@@ -75,12 +75,13 @@ const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose }) => {
                   </div>
                   <h3 className="font-display text-xl font-bold mb-1 text-primary">Your Cart is Empty</h3>
                   <p className="text-sm text-muted-foreground mb-6">Explore our delectable range of customized treats to start ordering!</p>
-                  <button
+                  <Link
+                    href="/shop"
                     onClick={onClose}
                     className="inline-flex items-center justify-center rounded-full bg-primary px-6 py-2.5 text-sm font-semibold text-white hover:bg-secondary transition-all"
                   >
                     Browse Bakes
-                  </button>
+                  </Link>
                 </div>
               ) : (
                 cartItems.map((item) => (

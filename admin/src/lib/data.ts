@@ -94,6 +94,16 @@ export interface Customer {
   emailVerified?: boolean;
 }
 
+export interface ContactMessage {
+  id: string;
+  name: string;
+  email: string;
+  phone?: string;
+  message: string;
+  createdAt: string;
+  read: boolean;
+}
+
 export interface SiteSettings {
   home_cover_photo: string;
   home_tagline: string;
@@ -884,6 +894,108 @@ export const createDeliveryZone = async (name: string, minOrderValue: number, fe
   };
   localZones.push(newZone);
   setLocalStorage('admin_zones', localZones);
+  return true;
+};
+
+// Contact Messages
+export const getContactMessages = async (): Promise<ContactMessage[]> => {
+  if (isSupabaseConfigured()) {
+    try {
+      const { data, error } = await supabase
+        .from('contact_messages')
+        .select('*')
+        .order('created_at', { ascending: false });
+      if (!error && data) {
+        return data.map((m: any) => ({
+          id: m.id,
+          name: m.name,
+          email: m.email,
+          phone: m.phone,
+          message: m.message,
+          createdAt: m.created_at,
+          read: m.read ?? false
+        }));
+      }
+    } catch (e) {
+      console.error('Failed to fetch contact messages from Supabase:', e);
+    }
+  }
+  return getLocalStorage('admin_contact_messages', []);
+};
+
+export const createContactMessage = async (messageData: { name: string; email: string; phone?: string; message: string }): Promise<boolean> => {
+  if (isSupabaseConfigured()) {
+    try {
+      const { error } = await supabase
+        .from('contact_messages')
+        .insert({
+          name: messageData.name,
+          email: messageData.email,
+          phone: messageData.phone || null,
+          message: messageData.message,
+          read: false
+        });
+      if (error) throw error;
+    } catch (e) {
+      console.error('Failed to create contact message in Supabase:', e);
+      return false;
+    }
+  }
+
+  const localMessages = getLocalStorage('admin_contact_messages', []);
+  const newMessage: ContactMessage = {
+    id: 'MSG-' + Math.random().toString(36).substring(2, 9).toUpperCase(),
+    name: messageData.name,
+    email: messageData.email,
+    phone: messageData.phone,
+    message: messageData.message,
+    createdAt: new Date().toISOString(),
+    read: false
+  };
+  localMessages.unshift(newMessage);
+  setLocalStorage('admin_contact_messages', localMessages);
+  return true;
+};
+
+export const markMessageAsRead = async (messageId: string): Promise<boolean> => {
+  if (isSupabaseConfigured()) {
+    try {
+      const { error } = await supabase
+        .from('contact_messages')
+        .update({ read: true })
+        .eq('id', messageId);
+      if (error) throw error;
+    } catch (e) {
+      console.error('Failed to mark message as read in Supabase:', e);
+      return false;
+    }
+  }
+
+  const localMessages = getLocalStorage('admin_contact_messages', []);
+  const updated = localMessages.map((m: ContactMessage) => 
+    m.id === messageId ? { ...m, read: true } : m
+  );
+  setLocalStorage('admin_contact_messages', updated);
+  return true;
+};
+
+export const deleteContactMessage = async (messageId: string): Promise<boolean> => {
+  if (isSupabaseConfigured()) {
+    try {
+      const { error } = await supabase
+        .from('contact_messages')
+        .delete()
+        .eq('id', messageId);
+      if (error) throw error;
+    } catch (e) {
+      console.error('Failed to delete message from Supabase:', e);
+      return false;
+    }
+  }
+
+  const localMessages = getLocalStorage('admin_contact_messages', []);
+  const updated = localMessages.filter((m: ContactMessage) => m.id !== messageId);
+  setLocalStorage('admin_contact_messages', updated);
   return true;
 };
 
